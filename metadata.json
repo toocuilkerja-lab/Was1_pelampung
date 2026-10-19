@@ -1,0 +1,6 @@
+{
+  "name": "Dashboard Penerimaan Pajak - Was I",
+  "description": "Dashboard Monitoring Penerimaan Pajak Seksi Pengawasan I dengan Agregasi AR dan Drill-down Wajib Pajak",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
