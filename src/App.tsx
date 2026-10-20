@@ -185,10 +185,11 @@ export default function App() {
             {/* 3. Global Filter Section (Flag & Bulan Bayar) */}
             <section aria-label="Global Filter">
               <GlobalFilter
-                flag={globalFlag}
+                flag={activeTab === 'pengawasan_masa' ? 'Semua' : globalFlag}
                 onFlagChange={setGlobalFlag}
                 selectedMonths={globalMonths}
                 onMonthsChange={setGlobalMonths}
+                disableFlagSelection={activeTab === 'pengawasan_masa'}
               />
             </section>
 

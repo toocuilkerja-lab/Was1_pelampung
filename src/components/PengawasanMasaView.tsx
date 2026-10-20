@@ -1,76 +1,80 @@
 import React, { useState, useMemo } from 'react';
-import { RealisasiRow, FlagFilter, MONTHS, MAP_DESCRIPTIONS } from '../types/tax';
-import { matchesFlagFilter, formatRupiah, formatPercent } from '../utils/taxCalculations';
+import { RealisasiRow, FlagFilter, MAP_DESCRIPTIONS } from '../types/tax';
+import { formatRupiah, formatPercent } from '../utils/taxCalculations';
 import {
   Search,
   Filter,
   Calendar,
   Layers,
-  ChevronDown,
-  ChevronRight,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
   Info,
-  CheckCircle2,
-  Table,
-  LayoutGrid,
 } from 'lucide-react';
 import { SlipDetailPopup } from './SlipDetailPopup';
 
 interface PengawasanMasaViewProps {
   realisasiRows: RealisasiRow[];
   arList: string[];
-  globalFlag: FlagFilter;
-  globalMonths: number[];
+  globalFlag?: FlagFilter;
+  globalMonths?: number[];
 }
 
-interface PeriodBreakdown {
-  monthNum: number; // 1-12 or 0 (Tahunan)
-  monthCode: string; // "01", "02", ..., "12", "00"
-  displayName: string;
-  isTahunan: boolean;
+export type YearFilterOption = 2026 | 2025 | 'both';
+
+interface MonthColumnDef {
+  monthNum: number;
+  label: string;
+}
+
+const MONTH_COLUMNS: MonthColumnDef[] = [
+  { monthNum: 1, label: 'Januari' },
+  { monthNum: 2, label: 'Februari' },
+  { monthNum: 3, label: 'Maret' },
+  { monthNum: 4, label: 'April' },
+  { monthNum: 5, label: 'Mei' },
+  { monthNum: 6, label: 'Juni' },
+  { monthNum: 7, label: 'Juli' },
+  { monthNum: 8, label: 'Agustus' },
+  { monthNum: 9, label: 'September' },
+  { monthNum: 10, label: 'Oktober' },
+  { monthNum: 11, label: 'November' },
+  { monthNum: 12, label: 'Desember' },
+  { monthNum: 0, label: 'Tahunan' },
+];
+
+interface MonthlyData {
   nominal2026: number;
   nominal2025: number;
-  selisih: number;
-  pertumbuhan: number;
-  txCount2026: number;
-  txCount2025: number;
+  transactions: RealisasiRow[];
 }
 
 interface WPPeriodSummary {
   namawp: string;
   namaAR: string;
   kdmapList: string[];
+  monthly: Record<number, MonthlyData>;
   total2026: number;
   total2025: number;
-  selisih: number;
-  pertumbuhan: number;
-  periods: PeriodBreakdown[];
   allTransactions: RealisasiRow[];
 }
 
-type SortField = 'namawp' | 'namaAR' | 'total2026' | 'total2025' | 'selisih' | 'pertumbuhan';
+type SortField = 'namawp' | 'namaAR' | 'total';
 type SortOrder = 'asc' | 'desc';
 
 export const PengawasanMasaView: React.FC<PengawasanMasaViewProps> = ({
   realisasiRows,
   arList,
-  globalFlag,
-  globalMonths,
 }) => {
-  // Required Top Filters: AR, Jenis Pajak (MAP), and Search WP
+  // 1. Filter states - Default filter tahun = 2026
+  const [filterYear, setFilterYear] = useState<YearFilterOption>(2026);
   const [filterAR, setFilterAR] = useState<string>('Semua');
   const [filterMAP, setFilterMAP] = useState<string>('Semua');
   const [searchWP, setSearchWP] = useState<string>('');
   const [yearBasis, setYearBasis] = useState<'tahunbayar' | 'tahun'>('tahunbayar'); // Tahun Bayar vs Tahun Pajak
-  const [viewMode, setViewMode] = useState<'hierarchical' | 'flat'>('hierarchical');
-
-  // Accordion state for expanded WPs
-  const [expandedWPs, setExpandedWPs] = useState<Set<string>>(new Set());
 
   // Table sorting
-  const [sortField, setSortField] = useState<SortField>('total2026');
+  const [sortField, setSortField] = useState<SortField>('total');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
   // Slip Detail Popup state
@@ -110,7 +114,7 @@ export const PengawasanMasaView: React.FC<PengawasanMasaViewProps> = ({
     return yearBasis === 'tahun' ? tx.tahun : tx.tahunbayar;
   };
 
-  // Helper to get period number (month 1-12 or 0)
+  // Helper to get period number (month 1-12 or 0 for Tahunan)
   const getTxPeriod = (tx: RealisasiRow): number => {
     if (String(tx.kdbayar) === '200' || String(tx.masa) === '00' || tx.masa === 0) {
       return 0; // 00 - Tahunan
@@ -120,7 +124,8 @@ export const PengawasanMasaView: React.FC<PengawasanMasaViewProps> = ({
     return tx.bulanbayar || 0;
   };
 
-  // 1. Filter base transactions by top filters: AR, MAP, Flag, globalMonths
+  // 1. Filter base transactions by top filters: AR and MAP
+  // Rule: Pengawasan Masa SELALU SEMUA FLAG (tidak memfilter PPM, PKM, PKM P3)
   const filteredBaseTransactions = useMemo(() => {
     return realisasiRows.filter((tx) => {
       // Filter AR
@@ -133,114 +138,82 @@ export const PengawasanMasaView: React.FC<PengawasanMasaViewProps> = ({
         return false;
       }
 
-      // Global Flag filter
-      if (!matchesFlagFilter(tx.flag, globalFlag)) {
-        return false;
-      }
-
-      // Global Months filter (applies to payment month)
-      if (globalMonths.length > 0 && !globalMonths.includes(tx.bulanbayar)) {
-        return false;
-      }
-
+      // Note: Khusus Pengawasan Masa hanya semua flag (tidak bisa memilih PPM, PKM, PKM P3)
       return true;
     });
-  }, [realisasiRows, filterAR, filterMAP, globalFlag, globalMonths]);
+  }, [realisasiRows, filterAR, filterMAP]);
 
-  // Defined periods for juxtaposition: 01 to 12, plus 00 Tahunan
-  const periodDefinitions = useMemo(() => {
-    const list: { monthNum: number; monthCode: string; displayName: string; isTahunan: boolean }[] = [];
-    MONTHS.forEach((m) => {
-      list.push({
-        monthNum: m.value,
-        monthCode: String(m.value).padStart(2, '0'),
-        displayName: `${String(m.value).padStart(2, '0')} - Masa Pajak ${m.label}`,
-        isTahunan: false,
-      });
-    });
-    list.push({
-      monthNum: 0,
-      monthCode: '00',
-      displayName: '00 - Tahunan',
-      isTahunan: true,
-    });
-    return list;
-  }, []);
-
-  // 2. Aggregate per Wajib Pajak and juxtapose periods 2025 vs 2026
+  // 2. Aggregate per Wajib Pajak and by month (Jan-Des & Tahunan)
   const wpSummaries: WPPeriodSummary[] = useMemo(() => {
-    const map = new Map<string, {
+    const wpMap = new Map<string, {
       namawp: string;
       namaAR: string;
       kdmapSet: Set<string>;
-      allTransactions: RealisasiRow[];
+      transactions: RealisasiRow[];
     }>();
 
     filteredBaseTransactions.forEach((tx) => {
-      if (!map.has(tx.namawp)) {
-        map.set(tx.namawp, {
+      if (!wpMap.has(tx.namawp)) {
+        wpMap.set(tx.namawp, {
           namawp: tx.namawp,
           namaAR: tx.nama || '-',
           kdmapSet: new Set(),
-          allTransactions: [],
+          transactions: [],
         });
       }
-      const entry = map.get(tx.namawp)!;
-      entry.allTransactions.push(tx);
+      const entry = wpMap.get(tx.namawp)!;
+      entry.transactions.push(tx);
       if (tx.kdmap) entry.kdmapSet.add(String(tx.kdmap));
     });
 
     const results: WPPeriodSummary[] = [];
 
-    map.forEach((entry) => {
-      // Calculate each period for this WP
-      const periods: PeriodBreakdown[] = periodDefinitions.map((def) => {
-        const periodTx = entry.allTransactions.filter((tx) => {
-          const p = getTxPeriod(tx);
-          return p === def.monthNum;
-        });
-
-        const tx2026 = periodTx.filter((t) => getTxYear(t) === 2026);
-        const tx2025 = periodTx.filter((t) => getTxYear(t) === 2025);
-
-        const nom2026 = tx2026.reduce((sum, t) => sum + Number(t.nominal || 0), 0);
-        const nom2025 = tx2025.reduce((sum, t) => sum + Number(t.nominal || 0), 0);
-        const diff = nom2026 - nom2025;
-        const growth = nom2025 > 0 ? (diff / nom2025) * 100 : nom2026 > 0 ? 100 : 0;
-
-        return {
-          monthNum: def.monthNum,
-          monthCode: def.monthCode,
-          displayName: def.displayName,
-          isTahunan: def.isTahunan,
-          nominal2026: nom2026,
-          nominal2025: nom2025,
-          selisih: diff,
-          pertumbuhan: growth,
-          txCount2026: tx2026.length,
-          txCount2025: tx2025.length,
-        };
+    wpMap.forEach((entry) => {
+      // Initialize monthly map (0-12)
+      const monthly: Record<number, MonthlyData> = {};
+      MONTH_COLUMNS.forEach((col) => {
+        monthly[col.monthNum] = { nominal2026: 0, nominal2025: 0, transactions: [] };
       });
 
-      const total2026 = periods.reduce((sum, p) => sum + p.nominal2026, 0);
-      const total2025 = periods.reduce((sum, p) => sum + p.nominal2025, 0);
-      const selisih = total2026 - total2025;
-      const pertumbuhan = total2025 > 0 ? (selisih / total2025) * 100 : total2026 > 0 ? 100 : 0;
+      let total2026 = 0;
+      let total2025 = 0;
 
-      // Only include WP if they have transactions in the periods
-      if (total2026 > 0 || total2025 > 0) {
-        results.push({
-          namawp: entry.namawp,
-          namaAR: entry.namaAR,
-          kdmapList: Array.from(entry.kdmapSet),
-          total2026,
-          total2025,
-          selisih,
-          pertumbuhan,
-          periods: periods,
-          allTransactions: entry.allTransactions,
-        });
-      }
+      entry.transactions.forEach((tx) => {
+        const y = getTxYear(tx);
+        const p = getTxPeriod(tx);
+        const nom = Number(tx.nominal || 0);
+
+        if (monthly[p]) {
+          monthly[p].transactions.push(tx);
+          if (y === 2026) {
+            monthly[p].nominal2026 += nom;
+            total2026 += nom;
+          } else if (y === 2025) {
+            monthly[p].nominal2025 += nom;
+            total2025 += nom;
+          }
+        }
+      });
+
+      // Filter WP based on filterYear
+      const hasRelevantData =
+        filterYear === 'both'
+          ? total2026 > 0 || total2025 > 0
+          : filterYear === 2026
+          ? total2026 > 0
+          : total2025 > 0;
+
+      if (!hasRelevantData) return;
+
+      results.push({
+        namawp: entry.namawp,
+        namaAR: entry.namaAR,
+        kdmapList: Array.from(entry.kdmapSet),
+        monthly,
+        total2026,
+        total2025,
+        allTransactions: entry.transactions,
+      });
     });
 
     // Search filter
@@ -256,25 +229,27 @@ export const PengawasanMasaView: React.FC<PengawasanMasaViewProps> = ({
     }
 
     return filtered;
-  }, [filteredBaseTransactions, periodDefinitions, searchWP, yearBasis]);
+  }, [filteredBaseTransactions, filterYear, searchWP, yearBasis]);
 
   // 3. Sort WP Summaries
   const sortedWPSummaries = useMemo(() => {
     return [...wpSummaries].sort((a, b) => {
-      const aVal = a[sortField];
-      const bVal = b[sortField];
-
-      if (typeof aVal === 'string') {
+      if (sortField === 'namawp') {
         return sortOrder === 'asc'
-          ? aVal.localeCompare(bVal as string)
-          : (bVal as string).localeCompare(aVal);
+          ? a.namawp.localeCompare(b.namawp)
+          : b.namawp.localeCompare(a.namawp);
       }
-
-      return sortOrder === 'asc'
-        ? (aVal as number) - (bVal as number)
-        : (bVal as number) - (aVal as number);
+      if (sortField === 'namaAR') {
+        return sortOrder === 'asc'
+          ? a.namaAR.localeCompare(b.namaAR)
+          : b.namaAR.localeCompare(a.namaAR);
+      }
+      // 'total'
+      const valA = filterYear === 2025 ? a.total2025 : a.total2026;
+      const valB = filterYear === 2025 ? b.total2025 : b.total2026;
+      return sortOrder === 'asc' ? valA - valB : valB - valA;
     });
-  }, [wpSummaries, sortField, sortOrder]);
+  }, [wpSummaries, sortField, sortOrder, filterYear]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -298,93 +273,251 @@ export const PengawasanMasaView: React.FC<PengawasanMasaViewProps> = ({
     );
   };
 
-  // Toggle WP accordion
-  const toggleWP = (namawp: string) => {
-    setExpandedWPs((prev) => {
-      const next = new Set(prev);
-      if (next.has(namawp)) {
-        next.delete(namawp);
-      } else {
-        next.add(namawp);
-      }
-      return next;
-    });
-  };
-
-  // Toggle expand all WPs
-  const allExpanded = useMemo(() => {
-    if (sortedWPSummaries.length === 0) return false;
-    return sortedWPSummaries.every((w) => expandedWPs.has(w.namawp));
-  }, [sortedWPSummaries, expandedWPs]);
-
-  const toggleAllWPs = () => {
-    if (allExpanded) {
-      setExpandedWPs(new Set());
-    } else {
-      setExpandedWPs(new Set(sortedWPSummaries.map((w) => w.namawp)));
-    }
-  };
-
-  // Grand totals across all filtered WPs
-  const grandTotal = useMemo(() => {
-    const total2026 = wpSummaries.reduce((acc, wp) => acc + wp.total2026, 0);
-    const total2025 = wpSummaries.reduce((acc, wp) => acc + wp.total2025, 0);
-    const selisih = total2026 - total2025;
-    const pertumbuhan =
-      total2025 > 0
-        ? (selisih / total2025) * 100
-        : total2026 > 0
-        ? 100
-        : 0;
-
-    return {
-      total2026,
-      total2025,
-      selisih,
-      pertumbuhan,
-      wpCount: wpSummaries.length,
-    };
-  }, [wpSummaries]);
-
-  // Open slip detail popup when a nominal is clicked
+  // Open slip detail popup
   const openSlip = (
     wpName: string,
     year: number,
-    monthNum: number | undefined,
-    transactions: RealisasiRow[]
+    monthNum?: number,
+    txList: RealisasiRow[] = [],
+    kdmap?: string
   ) => {
-    const tx = transactions.filter((t) => {
-      if (getTxYear(t) !== year) return false;
-      if (monthNum !== undefined && getTxPeriod(t) !== monthNum) return false;
-      if (filterMAP !== 'Semua' && String(t.kdmap) !== filterMAP) return false;
-      if (filterAR !== 'Semua' && t.nama.trim().toLowerCase() !== filterAR.trim().toLowerCase()) return false;
+    const filtered = txList.filter((tx) => {
+      if (getTxYear(tx) !== year) return false;
+      if (kdmap && String(tx.kdmap) !== kdmap) return false;
+      if (monthNum !== undefined) {
+        const p = getTxPeriod(tx);
+        if (p !== monthNum) return false;
+      }
       return true;
     });
-
-    const targetKdmap = filterMAP !== 'Semua' ? filterMAP : (tx[0]?.kdmap ? String(tx[0].kdmap) : 'Semua MAP');
 
     setSlipPopup({
       isOpen: true,
       wpName,
-      kdmap: targetKdmap,
+      kdmap: kdmap || (filtered[0]?.kdmap ? String(filtered[0].kdmap) : ''),
       year,
       monthNum,
-      transactions: tx,
+      transactions: filtered,
     });
   };
 
+  // Grand totals per month and overall
+  const grandMonthlyTotals = useMemo(() => {
+    const monthly: Record<number, { nom2026: number; nom2025: number; transactions: RealisasiRow[] }> = {};
+    MONTH_COLUMNS.forEach((col) => {
+      monthly[col.monthNum] = { nom2026: 0, nom2025: 0, transactions: [] };
+    });
+
+    let overall2026 = 0;
+    let overall2025 = 0;
+    const allTx: RealisasiRow[] = [];
+
+    sortedWPSummaries.forEach((wp) => {
+      overall2026 += wp.total2026;
+      overall2025 += wp.total2025;
+      allTx.push(...wp.allTransactions);
+
+      MONTH_COLUMNS.forEach((col) => {
+        const m = wp.monthly[col.monthNum];
+        if (m) {
+          monthly[col.monthNum].nom2026 += m.nominal2026;
+          monthly[col.monthNum].nom2025 += m.nominal2025;
+          monthly[col.monthNum].transactions.push(...m.transactions);
+        }
+      });
+    });
+
+    return {
+      monthly,
+      overall2026,
+      overall2025,
+      allTx,
+    };
+  }, [sortedWPSummaries]);
+
+  // Helper to render month cell content
+  const renderMonthCell = (
+    nom2026: number,
+    nom2025: number,
+    wpName: string,
+    monthNum: number,
+    txList: RealisasiRow[],
+    kdmap?: string
+  ) => {
+    if (filterYear === 'both') {
+      // 2026 & 2025 selected
+      if (nom2026 === 0 && nom2025 === 0) {
+        return <span className="text-slate-300 font-mono text-center block">-</span>;
+      }
+
+      const diff = nom2026 - nom2025;
+      const growth = nom2025 > 0 ? (diff / nom2025) * 100 : nom2026 > 0 ? 100 : 0;
+      const isZero = nom2025 === 0 && nom2026 === 0;
+
+      return (
+        <div className="text-[11px] font-mono leading-tight space-y-0.5 text-right py-0.5">
+          <div className="flex items-center justify-between gap-1 text-slate-800">
+            <span className="text-[10px] text-slate-400 font-sans select-none">2026 :</span>
+            <button
+              type="button"
+              onClick={() => openSlip(wpName, 2026, monthNum, txList, kdmap)}
+              className={`font-mono transition-colors ${
+                nom2026 > 0
+                  ? 'text-blue-900 font-bold hover:text-blue-600 hover:underline cursor-pointer'
+                  : 'text-slate-400'
+              }`}
+              title={`Lihat slip 2026: ${formatRupiah(nom2026)}`}
+            >
+              {nom2026 > 0 ? formatRupiah(nom2026) : '-'}
+            </button>
+          </div>
+          <div className="flex items-center justify-between gap-1 text-slate-700">
+            <span className="text-[10px] text-slate-400 font-sans select-none">2025 :</span>
+            <button
+              type="button"
+              onClick={() => openSlip(wpName, 2025, monthNum, txList, kdmap)}
+              className={`font-mono transition-colors ${
+                nom2025 > 0
+                  ? 'text-slate-700 font-medium hover:text-blue-600 hover:underline cursor-pointer'
+                  : 'text-slate-400'
+              }`}
+              title={`Lihat slip 2025: ${formatRupiah(nom2025)}`}
+            >
+              {nom2025 > 0 ? formatRupiah(nom2025) : '-'}
+            </button>
+          </div>
+          <div className="pt-0.5 text-right border-t border-slate-100">
+            <span
+              className={`inline-block text-[10px] font-semibold px-1 rounded ${
+                isZero
+                  ? 'text-slate-400'
+                  : growth >= 0
+                  ? 'text-emerald-700 bg-emerald-50'
+                  : 'text-rose-700 bg-rose-50'
+              }`}
+            >
+              {isZero ? '0%' : `Tumbuh ${growth >= 0 ? '+' : ''}${formatPercent(growth)}`}
+            </span>
+          </div>
+        </div>
+      );
+    } else {
+      // Single year selected (2026 or 2025) - only amount without year prefix
+      const val = filterYear === 2026 ? nom2026 : nom2025;
+      if (val === 0) {
+        return <span className="text-slate-300 font-mono text-center block">-</span>;
+      }
+      return (
+        <button
+          type="button"
+          onClick={() => openSlip(wpName, filterYear, monthNum, txList, kdmap)}
+          className="w-full text-right font-mono text-xs text-blue-900 font-semibold hover:text-blue-600 hover:underline cursor-pointer whitespace-nowrap block"
+          title={`Lihat slip ${filterYear}: ${formatRupiah(val)}`}
+        >
+          {formatRupiah(val)}
+        </button>
+      );
+    }
+  };
+
+  // Helper to render total cell content
+  const renderTotalCell = (
+    tot2026: number,
+    tot2025: number,
+    wpName: string,
+    txList: RealisasiRow[],
+    kdmap?: string
+  ) => {
+    if (filterYear === 'both') {
+      const diff = tot2026 - tot2025;
+      const growth = tot2025 > 0 ? (diff / tot2025) * 100 : tot2026 > 0 ? 100 : 0;
+      const isZero = tot2025 === 0 && tot2026 === 0;
+
+      return (
+        <div className="text-[11px] font-mono leading-tight space-y-0.5 text-right py-0.5">
+          <div className="flex items-center justify-between gap-1 text-slate-800">
+            <span className="text-[10px] text-slate-400 font-sans select-none">2026 :</span>
+            <button
+              type="button"
+              onClick={() => openSlip(wpName, 2026, undefined, txList, kdmap)}
+              className={`font-mono transition-colors ${
+                tot2026 > 0
+                  ? 'text-blue-900 font-bold hover:text-blue-600 hover:underline cursor-pointer'
+                  : 'text-slate-400'
+              }`}
+              title={`Lihat total slip 2026: ${formatRupiah(tot2026)}`}
+            >
+              {tot2026 > 0 ? formatRupiah(tot2026) : '-'}
+            </button>
+          </div>
+          <div className="flex items-center justify-between gap-1 text-slate-700">
+            <span className="text-[10px] text-slate-400 font-sans select-none">2025 :</span>
+            <button
+              type="button"
+              onClick={() => openSlip(wpName, 2025, undefined, txList, kdmap)}
+              className={`font-mono transition-colors ${
+                tot2025 > 0
+                  ? 'text-slate-700 font-medium hover:text-blue-600 hover:underline cursor-pointer'
+                  : 'text-slate-400'
+              }`}
+              title={`Lihat total slip 2025: ${formatRupiah(tot2025)}`}
+            >
+              {tot2025 > 0 ? formatRupiah(tot2025) : '-'}
+            </button>
+          </div>
+          <div className="pt-0.5 text-right border-t border-slate-200">
+            <span
+              className={`inline-block text-[10px] font-bold px-1 rounded ${
+                isZero
+                  ? 'text-slate-400'
+                  : growth >= 0
+                  ? 'text-emerald-700 bg-emerald-50'
+                  : 'text-rose-700 bg-rose-50'
+              }`}
+            >
+              {isZero ? '0%' : `Tumbuh ${growth >= 0 ? '+' : ''}${formatPercent(growth)}`}
+            </span>
+          </div>
+        </div>
+      );
+    } else {
+      const val = filterYear === 2026 ? tot2026 : tot2025;
+      if (val === 0) {
+        return <span className="text-slate-300 font-mono text-center block">-</span>;
+      }
+      return (
+        <button
+          type="button"
+          onClick={() => openSlip(wpName, filterYear, undefined, txList, kdmap)}
+          className="w-full text-right font-mono text-xs text-blue-900 font-bold hover:text-blue-600 hover:underline cursor-pointer whitespace-nowrap block"
+          title={`Lihat total slip ${filterYear}: ${formatRupiah(val)}`}
+        >
+          {formatRupiah(val)}
+        </button>
+      );
+    }
+  };
+
+  const grandDiff = grandMonthlyTotals.overall2026 - grandMonthlyTotals.overall2025;
+  const grandGrowth =
+    grandMonthlyTotals.overall2025 > 0
+      ? (grandDiff / grandMonthlyTotals.overall2025) * 100
+      : grandMonthlyTotals.overall2026 > 0
+      ? 100
+      : 0;
+
   return (
     <div className="space-y-4">
-      {/* 1. Header & Required Filters Bar */}
+      {/* 1. Header & Filters Bar */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-4 sm:p-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
           <div>
             <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight flex items-center gap-2">
               <Calendar className="w-5 h-5 text-blue-600" />
-              <span>Pengawasan Masa (Penyandingan Setoran 2025 vs 2026)</span>
+              <span>Pengawasan Masa Pajak</span>
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Monitoring kepatuhan setoran per masa pajak (01 s.d. 12 & Tahunan) disandingkan antara tahun 2025 dan 2026
+              Tabel matriks setoran per masa pajak (Januari s.d. Desember & Tahunan) per Wajib Pajak (Semua Flag)
             </p>
           </div>
 
@@ -418,13 +551,34 @@ export const PengawasanMasaView: React.FC<PengawasanMasaViewProps> = ({
           </div>
         </div>
 
-        {/* The Mandatory Filters: Filter AR and Filter Jenis Pajak (MAP) + Search WP */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-3">
-          {/* Filter 1: AR */}
+        {/* 4 Top Filters: Tahun, AR, Jenis Pajak (MAP), and Search WP */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-3">
+          {/* Filter 1: Tahun (Default: 2026, options: 2026, 2025, 2026 & 2025) */}
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1">
+              <Calendar className="w-3 h-3 text-blue-600" />
+              <span>Filter Tahun:</span>
+            </label>
+            <select
+              value={filterYear}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === 'both') setFilterYear('both');
+                else setFilterYear(parseInt(val, 10) as 2026 | 2025);
+              }}
+              className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-2xs transition-colors"
+            >
+              <option value={2026}>2026</option>
+              <option value={2025}>2025</option>
+              <option value="both">2026 & 2025</option>
+            </select>
+          </div>
+
+          {/* Filter 2: AR */}
           <div className="flex flex-col gap-1">
             <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1">
               <Filter className="w-3 h-3 text-blue-600" />
-              <span>Filter Account Representative (AR):</span>
+              <span>Filter AR Pengampu:</span>
             </label>
             <select
               value={filterAR}
@@ -440,7 +594,7 @@ export const PengawasanMasaView: React.FC<PengawasanMasaViewProps> = ({
             </select>
           </div>
 
-          {/* Filter 2: Jenis Pajak (MAP) */}
+          {/* Filter 3: Jenis Pajak (MAP) */}
           <div className="flex flex-col gap-1">
             <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1">
               <Layers className="w-3 h-3 text-blue-600" />
@@ -460,7 +614,7 @@ export const PengawasanMasaView: React.FC<PengawasanMasaViewProps> = ({
             </select>
           </div>
 
-          {/* Filter 3: Search WP */}
+          {/* Filter 4: Search WP */}
           <div className="flex flex-col gap-1">
             <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1">
               <Search className="w-3 h-3 text-blue-600" />
@@ -487,59 +641,95 @@ export const PengawasanMasaView: React.FC<PengawasanMasaViewProps> = ({
           </div>
         </div>
 
-        {/* KPI Mini-cards */}
+        {/* KPI Summary Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-3.5 mt-3 border-t border-slate-100">
-          <div className="bg-slate-50/70 p-2.5 rounded-lg border border-slate-200">
-            <span className="text-[11px] text-slate-500 block">Total Realisasi 2026</span>
-            <span className="text-sm font-bold text-blue-900 font-mono">
-              {formatRupiah(grandTotal.total2026)}
-            </span>
-          </div>
-          <div className="bg-slate-50/70 p-2.5 rounded-lg border border-slate-200">
-            <span className="text-[11px] text-slate-500 block">Total Realisasi 2025</span>
-            <span className="text-sm font-bold text-slate-700 font-mono">
-              {formatRupiah(grandTotal.total2025)}
-            </span>
-          </div>
-          <div className="bg-slate-50/70 p-2.5 rounded-lg border border-slate-200">
-            <span className="text-[11px] text-slate-500 block">Pertumbuhan (YoY)</span>
-            <span
-              className={`text-sm font-bold font-mono ${
-                grandTotal.pertumbuhan >= 0 ? 'text-emerald-700' : 'text-rose-700'
-              }`}
-            >
-              {formatPercent(grandTotal.pertumbuhan)} ({formatRupiah(grandTotal.selisih)})
-            </span>
-          </div>
-          <div className="bg-slate-50/70 p-2.5 rounded-lg border border-slate-200">
-            <span className="text-[11px] text-slate-500 block">Wajib Pajak Terfilter</span>
-            <span className="text-sm font-bold text-slate-900">
-              {grandTotal.wpCount} Wajib Pajak
-            </span>
-          </div>
+          {filterYear === 'both' ? (
+            <>
+              <div className="bg-slate-50/70 p-2.5 rounded-lg border border-slate-200">
+                <span className="text-[11px] text-slate-500 block">Total Realisasi 2026</span>
+                <span className="text-sm font-bold text-blue-900 font-mono">
+                  {formatRupiah(grandMonthlyTotals.overall2026)}
+                </span>
+              </div>
+              <div className="bg-slate-50/70 p-2.5 rounded-lg border border-slate-200">
+                <span className="text-[11px] text-slate-500 block">Total Realisasi 2025</span>
+                <span className="text-sm font-bold text-slate-700 font-mono">
+                  {formatRupiah(grandMonthlyTotals.overall2025)}
+                </span>
+              </div>
+              <div className="bg-slate-50/70 p-2.5 rounded-lg border border-slate-200">
+                <span className="text-[11px] text-slate-500 block">Pertumbuhan (YoY)</span>
+                <span
+                  className={`text-sm font-bold font-mono ${
+                    grandGrowth >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                  }`}
+                >
+                  {formatPercent(grandGrowth)}
+                </span>
+              </div>
+              <div className="bg-slate-50/70 p-2.5 rounded-lg border border-slate-200">
+                <span className="text-[11px] text-slate-500 block">Jumlah Wajib Pajak</span>
+                <span className="text-sm font-bold text-slate-900">
+                  {sortedWPSummaries.length} WP
+                </span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="bg-slate-50/70 p-2.5 rounded-lg border border-slate-200">
+                <span className="text-[11px] text-slate-500 block">Total Realisasi {filterYear}</span>
+                <span className="text-sm font-bold text-blue-900 font-mono">
+                  {formatRupiah(filterYear === 2026 ? grandMonthlyTotals.overall2026 : grandMonthlyTotals.overall2025)}
+                </span>
+              </div>
+              <div className="bg-slate-50/70 p-2.5 rounded-lg border border-slate-200">
+                <span className="text-[11px] text-slate-500 block">Jumlah Wajib Pajak</span>
+                <span className="text-sm font-bold text-slate-900">
+                  {sortedWPSummaries.length} WP
+                </span>
+              </div>
+              <div className="bg-slate-50/70 p-2.5 rounded-lg border border-slate-200">
+                <span className="text-[11px] text-slate-500 block">Rata-rata per WP</span>
+                <span className="text-sm font-bold text-slate-700 font-mono">
+                  {formatRupiah(
+                    sortedWPSummaries.length > 0
+                      ? (filterYear === 2026 ? grandMonthlyTotals.overall2026 : grandMonthlyTotals.overall2025) /
+                          sortedWPSummaries.length
+                      : 0
+                  )}
+                </span>
+              </div>
+              <div className="bg-slate-50/70 p-2.5 rounded-lg border border-slate-200">
+                <span className="text-[11px] text-slate-500 block">Rata-rata per Bulan</span>
+                <span className="text-sm font-bold text-slate-700 font-mono">
+                  {formatRupiah(
+                    (filterYear === 2026 ? grandMonthlyTotals.overall2026 : grandMonthlyTotals.overall2025) / 12
+                  )}
+                </span>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
-      {/* 2. Main Table: Setoran per Masa Pajak per Wajib Pajak Disandingkan */}
+      {/* 2. Main Table: Kolom Januari s.d. Desember & Tahunan + Total (Tanpa +- Jenis Pajak) */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden flex flex-col">
-        {/* Table Top Toolbar */}
-        <div className="px-5 py-3.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 bg-slate-50/70">
+        {/* Table Toolbar */}
+        <div className="px-5 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 bg-slate-50/70">
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={toggleAllWPs}
-              className="text-xs font-semibold text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1.5 shadow-2xs"
-            >
-              <span className="font-mono">{allExpanded ? '[-]' : '[+]'}</span>
-              <span>{allExpanded ? 'Tutup Seluruh Rincian Masa' : 'Buka Seluruh Rincian 12 Masa'}</span>
-            </button>
-            <span className="text-xs text-slate-500 hidden sm:inline">
-              (Menampilkan {sortedWPSummaries.length} WP)
+            <span className="text-xs font-semibold text-slate-800">
+              Menampilkan {sortedWPSummaries.length} Wajib Pajak
             </span>
           </div>
 
           <div className="text-xs text-slate-500 flex items-center gap-2">
             <span>Filter Aktif:</span>
+            <span className="font-semibold text-slate-800">
+              {filterYear === 'both' ? '2026 & 2025' : `Tahun ${filterYear}`}
+            </span>
+            <span>•</span>
+            <span className="font-semibold text-slate-800">Semua Flag</span>
+            <span>•</span>
             <span className="font-semibold text-slate-800">{filterAR}</span>
             <span>•</span>
             <span className="font-semibold text-slate-800">
@@ -548,31 +738,28 @@ export const PengawasanMasaView: React.FC<PengawasanMasaViewProps> = ({
           </div>
         </div>
 
-        {/* Responsive Table */}
+        {/* Matrix Table with Horizontal Scroll */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-slate-700 border-collapse">
+          <table className="w-full text-left text-xs text-slate-700 border-collapse">
             <thead className="bg-slate-100/90 text-xs text-slate-600 font-semibold uppercase tracking-wider border-b border-slate-200 select-none">
               <tr>
                 <th scope="col" className="py-3 px-3 text-center w-12 text-slate-500">
-                  +/-
-                </th>
-                <th scope="col" className="py-3 px-2 text-center w-10 text-slate-500">
                   No
                 </th>
                 <th
                   scope="col"
-                  className="py-3 px-4 cursor-pointer hover:bg-slate-200/70 transition-colors group"
+                  className="py-3 px-3 cursor-pointer hover:bg-slate-200/70 transition-colors group min-w-[200px]"
                   onClick={() => handleSort('namawp')}
                   title="Urutkan berdasarkan Nama Wajib Pajak"
                 >
                   <div className="flex items-center gap-1">
-                    <span>Nama Wajib Pajak (WP)</span>
+                    <span>Nama Wajib Pajak</span>
                     {renderSortIcon('namawp')}
                   </div>
                 </th>
                 <th
                   scope="col"
-                  className="py-3 px-3 cursor-pointer hover:bg-slate-200/70 transition-colors group"
+                  className="py-3 px-3 cursor-pointer hover:bg-slate-200/70 transition-colors group min-w-[130px]"
                   onClick={() => handleSort('namaAR')}
                   title="Urutkan berdasarkan AR Pengampu"
                 >
@@ -581,52 +768,33 @@ export const PengawasanMasaView: React.FC<PengawasanMasaViewProps> = ({
                     {renderSortIcon('namaAR')}
                   </div>
                 </th>
+
+                {/* Januari s.d. Desember & Tahunan */}
+                {MONTH_COLUMNS.map((col) => (
+                  <th
+                    key={col.monthNum}
+                    scope="col"
+                    className={`py-3 px-2.5 text-center font-bold text-slate-700 border-l border-slate-200 ${
+                      filterYear === 'both' ? 'min-w-[140px]' : 'min-w-[110px]'
+                    }`}
+                  >
+                    <span>{col.label}</span>
+                  </th>
+                ))}
+
+                {/* Total Column */}
                 <th
                   scope="col"
-                  className="py-3 px-4 text-right cursor-pointer hover:bg-blue-100/60 transition-colors group bg-blue-50/50 text-blue-900 border-x border-blue-100"
-                  onClick={() => handleSort('total2026')}
-                  title="Urutkan Realisasi 2026. Klik nominal untuk rincian slip"
+                  onClick={() => handleSort('total')}
+                  className={`py-3 px-3 text-right font-bold text-blue-950 bg-blue-50/70 border-l-2 border-blue-200 cursor-pointer hover:bg-blue-100/70 transition-colors ${
+                    filterYear === 'both' ? 'min-w-[150px]' : 'min-w-[130px]'
+                  }`}
+                  title="Urutkan berdasarkan Total Realisasi"
                 >
                   <div className="flex items-center justify-end gap-1">
-                    <span>2026 ({yearBasis === 'tahun' ? 'Thn Pajak' : 'Berjalan'})</span>
-                    {renderSortIcon('total2026')}
+                    <span>Total</span>
+                    {renderSortIcon('total')}
                   </div>
-                </th>
-                <th
-                  scope="col"
-                  className="py-3 px-4 text-right cursor-pointer hover:bg-slate-200/70 transition-colors group"
-                  onClick={() => handleSort('total2025')}
-                  title="Urutkan Realisasi 2025. Klik nominal untuk rincian slip"
-                >
-                  <div className="flex items-center justify-end gap-1">
-                    <span>2025 ({yearBasis === 'tahun' ? 'Thn Pajak' : 'Tahun Lalu'})</span>
-                    {renderSortIcon('total2025')}
-                  </div>
-                </th>
-                <th
-                  scope="col"
-                  className="py-3 px-4 text-right cursor-pointer hover:bg-slate-200/70 transition-colors group"
-                  onClick={() => handleSort('selisih')}
-                  title="Urutkan Selisih"
-                >
-                  <div className="flex items-center justify-end gap-1">
-                    <span>Selisih (Rp)</span>
-                    {renderSortIcon('selisih')}
-                  </div>
-                </th>
-                <th
-                  scope="col"
-                  className="py-3 px-4 text-center cursor-pointer hover:bg-slate-200/70 transition-colors group"
-                  onClick={() => handleSort('pertumbuhan')}
-                  title="Urutkan Pertumbuhan"
-                >
-                  <div className="flex items-center justify-center gap-1">
-                    <span>Tumbuh (%)</span>
-                    {renderSortIcon('pertumbuhan')}
-                  </div>
-                </th>
-                <th scope="col" className="py-3 px-3 text-center w-28">
-                  Rincian
                 </th>
               </tr>
             </thead>
@@ -634,354 +802,143 @@ export const PengawasanMasaView: React.FC<PengawasanMasaViewProps> = ({
             <tbody className="divide-y divide-slate-100 font-sans">
               {sortedWPSummaries.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-xs text-slate-500">
+                  <td colSpan={3 + MONTH_COLUMNS.length + 1} className="py-12 text-center text-xs text-slate-500">
                     <Info className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                    Tidak ada data transaksi yang sesuai dengan filter AR, Jenis Pajak, atau kata kunci pencarian.
+                    Tidak ada data transaksi yang sesuai dengan filter tahun, AR, Jenis Pajak, atau kata kunci pencarian.
                   </td>
                 </tr>
               ) : (
                 sortedWPSummaries.map((wp, idx) => {
-                  const isExpanded = expandedWPs.has(wp.namawp);
-                  const isPositive = wp.pertumbuhan >= 0;
-                  const isZero = wp.total2025 === 0 && wp.total2026 === 0;
-
                   return (
-                    <React.Fragment key={wp.namawp}>
-                      {/* Parent WP Row */}
-                      <tr
-                        className={`hover:bg-slate-50/80 transition-colors group ${
-                          isExpanded ? 'bg-blue-50/20' : ''
+                    <tr
+                      key={wp.namawp}
+                      className="hover:bg-slate-50/80 transition-colors group"
+                    >
+                      {/* No */}
+                      <td className="py-2.5 px-3 text-center text-xs font-mono text-slate-400">
+                        {idx + 1}
+                      </td>
+
+                      {/* Nama Wajib Pajak */}
+                      <td className="py-2.5 px-3 font-semibold text-slate-900 min-w-[200px]">
+                        <span>{wp.namawp}</span>
+                      </td>
+
+                      {/* AR Pengampu */}
+                      <td className="py-2.5 px-3 text-xs text-slate-700 whitespace-nowrap min-w-[130px]">
+                        <span className="bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-[11px]">
+                          {wp.namaAR}
+                        </span>
+                      </td>
+
+                      {/* Month Columns: Januari s.d. Desember & Tahunan */}
+                      {MONTH_COLUMNS.map((col) => {
+                        const mData = wp.monthly[col.monthNum] || { nominal2026: 0, nominal2025: 0, transactions: [] };
+                        return (
+                          <td
+                            key={col.monthNum}
+                            className={`py-2 px-2.5 border-l border-slate-100 align-middle ${
+                              filterYear === 'both' ? 'min-w-[140px]' : 'min-w-[110px]'
+                            }`}
+                          >
+                            {renderMonthCell(
+                              mData.nominal2026,
+                              mData.nominal2025,
+                              wp.namawp,
+                              col.monthNum,
+                              mData.transactions
+                            )}
+                          </td>
+                        );
+                      })}
+
+                      {/* Total Column */}
+                      <td
+                        className={`py-2 px-3 border-l-2 border-slate-200 bg-slate-50/50 align-middle font-bold ${
+                          filterYear === 'both' ? 'min-w-[150px]' : 'min-w-[130px]'
                         }`}
                       >
-                        {/* Toggle button +/- */}
-                        <td className="py-3 px-3 text-center">
-                          <button
-                            type="button"
-                            onClick={() => toggleWP(wp.namawp)}
-                            className="w-6 h-6 rounded flex items-center justify-center text-slate-500 hover:text-blue-700 hover:bg-blue-100 font-mono text-xs font-bold transition-colors cursor-pointer border border-slate-200 shadow-2xs"
-                            title={isExpanded ? 'Tutup Rincian Masa' : 'Buka Rincian 12 Masa Pajak'}
-                          >
-                            {isExpanded ? '−' : '+'}
-                          </button>
-                        </td>
-
-                        {/* No */}
-                        <td className="py-3 px-2 text-center text-xs font-mono text-slate-400">
-                          {idx + 1}
-                        </td>
-
-                        {/* Nama WP */}
-                        <td className="py-3 px-4 font-semibold text-slate-900">
-                          <button
-                            type="button"
-                            onClick={() => toggleWP(wp.namawp)}
-                            className="text-left hover:text-blue-600 cursor-pointer transition-colors block"
-                          >
-                            <span>{wp.namawp}</span>
-                          </button>
-                        </td>
-
-                        {/* AR Pengampu */}
-                        <td className="py-3 px-3 text-xs text-slate-700 whitespace-nowrap">
-                          <span className="bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                            {wp.namaAR}
-                          </span>
-                        </td>
-
-                        {/* 2026 */}
-                        <td className="py-3 px-4 text-right font-mono text-xs border-x border-blue-50 whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => openSlip(wp.namawp, 2026, undefined, wp.allTransactions)}
-                            className={`w-full text-right font-mono text-xs cursor-pointer hover:underline transition-colors ${
-                              wp.total2026 > 0
-                                ? 'text-blue-900 font-bold hover:text-blue-600'
-                                : 'text-slate-400 hover:text-slate-600'
-                            }`}
-                            title={`Klik untuk melihat rincian transaksi setoran ${wp.namawp} tahun 2026`}
-                          >
-                            {formatRupiah(wp.total2026)}
-                          </button>
-                        </td>
-
-                        {/* 2025 */}
-                        <td className="py-3 px-4 text-right font-mono text-xs whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => openSlip(wp.namawp, 2025, undefined, wp.allTransactions)}
-                            className={`w-full text-right font-mono text-xs cursor-pointer hover:underline transition-colors ${
-                              wp.total2025 > 0
-                                ? 'text-slate-800 font-bold hover:text-blue-600'
-                                : 'text-slate-400 hover:text-slate-600'
-                            }`}
-                            title={`Klik untuk melihat rincian transaksi setoran ${wp.namawp} tahun 2025`}
-                          >
-                            {formatRupiah(wp.total2025)}
-                          </button>
-                        </td>
-
-                        {/* Selisih */}
-                        <td
-                          className={`py-3 px-4 text-right font-mono text-xs whitespace-nowrap font-medium ${
-                            wp.selisih >= 0 ? 'text-emerald-700' : 'text-rose-600'
-                          }`}
-                        >
-                          {formatRupiah(wp.selisih)}
-                        </td>
-
-                        {/* Tumbuh */}
-                        <td className="py-3 px-4 text-center whitespace-nowrap">
-                          <span
-                            className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold ${
-                              isZero
-                                ? 'text-slate-400 bg-slate-100'
-                                : isPositive
-                                ? 'text-emerald-700 bg-emerald-50 border border-emerald-200'
-                                : 'text-rose-700 bg-rose-50 border border-rose-200'
-                            }`}
-                          >
-                            {isZero ? '0,00%' : formatPercent(wp.pertumbuhan)}
-                          </span>
-                        </td>
-
-                        {/* Aksi Button */}
-                        <td className="py-3 px-3 text-center whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => toggleWP(wp.namawp)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors cursor-pointer"
-                          >
-                            <span>{isExpanded ? 'Tutup' : 'Lihat 12 Masa'}</span>
-                            {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                          </button>
-                        </td>
-                      </tr>
-
-                      {/* Expanded Sub-table: Setoran per Masa Pajak (01-12 & 00 Tahunan) Disandingkan 2025 vs 2026 */}
-                      {isExpanded && (
-                        <tr className="bg-slate-50/90">
-                          <td colSpan={9} className="p-3 sm:p-4">
-                            <div className="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 shadow-sm">
-                              <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-100">
-                                <span className="text-xs font-bold text-slate-800 flex items-center gap-2">
-                                  <span>Penyandingan 12 Masa Pajak:</span>
-                                  <span className="font-semibold text-blue-900 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                                    {wp.namawp}
-                                  </span>
-                                </span>
-                                <span className="text-[11px] text-slate-500">
-                                  Klik nominal untuk melihat bukti slip setoran per masa
-                                </span>
-                              </div>
-
-                              <div className="overflow-x-auto">
-                                <table className="w-full text-left text-xs border-collapse">
-                                  <thead className="bg-slate-100 text-[11px] font-bold text-slate-700 uppercase tracking-wider border-b border-slate-200 select-none">
-                                    <tr>
-                                      <th className="py-2 px-3 text-center w-10 text-slate-400">No</th>
-                                      <th className="py-2 px-4 font-bold text-slate-800">
-                                        Masa Pajak
-                                      </th>
-                                      <th className="py-2 px-4 text-right font-bold text-blue-900 bg-blue-50/60 border-x border-blue-100">
-                                        Realisasi 2026 ({yearBasis === 'tahun' ? 'Thn Pajak' : 'Tahun Bayar'})
-                                      </th>
-                                      <th className="py-2 px-4 text-right font-semibold text-slate-700">
-                                        Realisasi 2025 ({yearBasis === 'tahun' ? 'Thn Pajak' : 'Tahun Bayar'})
-                                      </th>
-                                      <th className="py-2 px-4 text-right font-semibold text-slate-700">
-                                        Selisih (Rp)
-                                      </th>
-                                      <th className="py-2 px-4 text-center font-semibold text-slate-700">
-                                        Tumbuh (%)
-                                      </th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-slate-100">
-                                    {wp.periods.map((period, pIdx) => {
-                                      const pPositive = period.pertumbuhan >= 0;
-                                      const pZero = period.nominal2025 === 0 && period.nominal2026 === 0;
-
-                                      return (
-                                        <tr
-                                          key={period.monthCode}
-                                          className={`hover:bg-blue-50/40 transition-colors ${
-                                            period.isTahunan ? 'bg-amber-50/30' : ''
-                                          }`}
-                                        >
-                                          <td className="py-2 px-3 text-center font-mono text-slate-400">
-                                            {pIdx + 1}
-                                          </td>
-                                          <td className="py-2 px-4">
-                                            <span
-                                              className={`font-mono text-xs ${
-                                                period.isTahunan
-                                                  ? 'font-bold text-amber-950 bg-amber-100/80 px-2 py-0.5 rounded border border-amber-300'
-                                                  : 'font-medium text-slate-800'
-                                              }`}
-                                            >
-                                              {period.displayName}
-                                            </span>
-                                            {period.isTahunan && (
-                                              <span className="ml-2 text-[10px] text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                                                kdbayar 200
-                                              </span>
-                                            )}
-                                          </td>
-                                          {/* 2026 Nominal */}
-                                          <td className="py-2 px-4 text-right font-mono text-xs border-x border-blue-50 whitespace-nowrap">
-                                            <button
-                                              type="button"
-                                              onClick={() =>
-                                                openSlip(wp.namawp, 2026, period.monthNum, wp.allTransactions)
-                                              }
-                                              className={`w-full text-right font-mono text-xs cursor-pointer hover:underline transition-colors ${
-                                                period.nominal2026 > 0
-                                                  ? 'text-blue-900 font-bold hover:text-blue-600'
-                                                  : 'text-slate-400 hover:text-slate-600'
-                                              }`}
-                                              title={`Lihat bukti slip ${wp.namawp} Masa ${period.displayName} tahun 2026`}
-                                            >
-                                              {formatRupiah(period.nominal2026)}
-                                            </button>
-                                          </td>
-                                          {/* 2025 Nominal */}
-                                          <td className="py-2 px-4 text-right font-mono text-xs whitespace-nowrap">
-                                            <button
-                                              type="button"
-                                              onClick={() =>
-                                                openSlip(wp.namawp, 2025, period.monthNum, wp.allTransactions)
-                                              }
-                                              className={`w-full text-right font-mono text-xs cursor-pointer hover:underline transition-colors ${
-                                                period.nominal2025 > 0
-                                                  ? 'text-slate-800 font-bold hover:text-blue-600'
-                                                  : 'text-slate-400 hover:text-slate-600'
-                                              }`}
-                                              title={`Lihat bukti slip ${wp.namawp} Masa ${period.displayName} tahun 2025`}
-                                            >
-                                              {formatRupiah(period.nominal2025)}
-                                            </button>
-                                          </td>
-                                          {/* Selisih */}
-                                          <td
-                                            className={`py-2 px-4 text-right font-mono text-xs whitespace-nowrap font-medium ${
-                                              period.selisih >= 0 ? 'text-emerald-700' : 'text-rose-600'
-                                            }`}
-                                          >
-                                            {formatRupiah(period.selisih)}
-                                          </td>
-                                          {/* Tumbuh */}
-                                          <td className="py-2 px-4 text-center whitespace-nowrap">
-                                            <span
-                                              className={`inline-block px-2 py-0.5 rounded text-[11px] font-mono font-semibold ${
-                                                pZero
-                                                  ? 'text-slate-400'
-                                                  : pPositive
-                                                  ? 'text-emerald-700 bg-emerald-50 border border-emerald-200'
-                                                  : 'text-rose-700 bg-rose-50 border border-rose-200'
-                                              }`}
-                                            >
-                                              {pZero ? '0,00%' : formatPercent(period.pertumbuhan)}
-                                            </span>
-                                          </td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                  <tfoot className="bg-slate-900 text-white font-bold border-t-2 border-slate-700 text-xs">
-                                    <tr>
-                                      <td className="py-2.5 px-3 text-center text-slate-400">Σ</td>
-                                      <td className="py-2.5 px-4 uppercase tracking-wider">
-                                        TOTAL SELURUH MASA
-                                      </td>
-                                      <td className="py-2.5 px-4 text-right font-mono text-white bg-blue-900/60 border-x border-blue-800 whitespace-nowrap">
-                                        {formatRupiah(wp.total2026)}
-                                      </td>
-                                      <td className="py-2.5 px-4 text-right font-mono text-slate-300 whitespace-nowrap">
-                                        {formatRupiah(wp.total2025)}
-                                      </td>
-                                      <td
-                                        className={`py-2.5 px-4 text-right font-mono whitespace-nowrap ${
-                                          wp.selisih >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                                        }`}
-                                      >
-                                        {formatRupiah(wp.selisih)}
-                                      </td>
-                                      <td className="py-2.5 px-4 text-center whitespace-nowrap">
-                                        <span
-                                          className={`inline-block px-2 py-0.5 rounded text-[11px] font-mono font-bold ${
-                                            wp.pertumbuhan >= 0
-                                              ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                                              : 'bg-rose-950 text-rose-300 border border-rose-800'
-                                          }`}
-                                        >
-                                          {formatPercent(wp.pertumbuhan)}
-                                        </span>
-                                      </td>
-                                    </tr>
-                                  </tfoot>
-                                </table>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
+                        {renderTotalCell(
+                          wp.total2026,
+                          wp.total2025,
+                          wp.namawp,
+                          wp.allTransactions
+                        )}
+                      </td>
+                    </tr>
                   );
                 })
               )}
             </tbody>
 
-            {/* Grand Total Footer */}
-            <tfoot className="bg-slate-900 text-white font-semibold text-xs border-t-2 border-slate-700">
-              <tr>
-                <td className="py-4 px-3 text-center text-slate-400">Σ</td>
-                <td className="py-4 px-2 text-center text-slate-400 font-mono">-</td>
-                <td className="py-4 px-4 font-bold tracking-tight text-white uppercase">
-                  TOTAL KESELURUHAN PENGAWASAN MASA ({sortedWPSummaries.length} WP)
-                </td>
-                <td className="py-4 px-3 text-slate-400">-</td>
-                <td className="py-4 px-4 text-right font-mono font-bold text-white whitespace-nowrap bg-blue-900/60 border-x border-blue-800">
-                  {formatRupiah(grandTotal.total2026)}
-                </td>
-                <td className="py-4 px-4 text-right font-mono text-slate-300 whitespace-nowrap">
-                  {formatRupiah(grandTotal.total2025)}
-                </td>
-                <td
-                  className={`py-4 px-4 text-right font-mono whitespace-nowrap font-bold ${
-                    grandTotal.selisih >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                  }`}
-                >
-                  {formatRupiah(grandTotal.selisih)}
-                </td>
-                <td className="py-4 px-4 text-center whitespace-nowrap">
-                  <span
-                    className={`inline-block px-2.5 py-1 rounded text-xs font-mono font-bold ${
-                      grandTotal.pertumbuhan >= 0
-                        ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                        : 'bg-rose-950 text-rose-300 border border-rose-800'
+            {/* Grand Total Row */}
+            {sortedWPSummaries.length > 0 && (
+              <tfoot className="bg-slate-100/95 font-bold text-slate-900 border-t-2 border-slate-300">
+                <tr>
+                  <td className="py-3 px-3 text-center text-slate-400 font-mono text-xs">
+                    Σ
+                  </td>
+                  <td className="py-3 px-3 uppercase tracking-wider font-extrabold text-blue-950 text-xs">
+                    TOTAL SELURUH WP
+                  </td>
+                  <td className="py-3 px-3 text-xs text-slate-600 font-medium whitespace-nowrap">
+                    {sortedWPSummaries.length} Wajib Pajak
+                  </td>
+
+                  {/* Grand Total for Each Month */}
+                  {MONTH_COLUMNS.map((col) => {
+                    const gData = grandMonthlyTotals.monthly[col.monthNum] || { nom2026: 0, nom2025: 0, transactions: [] };
+                    return (
+                      <td
+                        key={col.monthNum}
+                        className={`py-2 px-2.5 border-l border-slate-200 align-middle ${
+                          filterYear === 'both' ? 'min-w-[140px]' : 'min-w-[110px]'
+                        }`}
+                      >
+                        {renderMonthCell(
+                          gData.nom2026,
+                          gData.nom2025,
+                          'Semua Wajib Pajak',
+                          col.monthNum,
+                          gData.transactions
+                        )}
+                      </td>
+                    );
+                  })}
+
+                  {/* Overall Total */}
+                  <td
+                    className={`py-2 px-3 border-l-2 border-blue-200 bg-blue-50/70 align-middle font-black ${
+                      filterYear === 'both' ? 'min-w-[150px]' : 'min-w-[130px]'
                     }`}
                   >
-                    {formatPercent(grandTotal.pertumbuhan)}
-                  </span>
-                </td>
-                <td className="py-4 px-3 text-center text-slate-400 text-[11px]">-</td>
-              </tr>
-            </tfoot>
+                    {renderTotalCell(
+                      grandMonthlyTotals.overall2026,
+                      grandMonthlyTotals.overall2025,
+                      'Semua Wajib Pajak',
+                      grandMonthlyTotals.allTx
+                    )}
+                  </td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </div>
 
-      {/* Slip Detail Popup when clicking 2026 or 2025 numbers */}
-      <SlipDetailPopup
-        isOpen={slipPopup.isOpen}
-        onClose={() => setSlipPopup((prev) => ({ ...prev, isOpen: false }))}
-        wpName={slipPopup.wpName}
-        kdmap={slipPopup.kdmap}
-        year={slipPopup.year}
-        monthNum={slipPopup.monthNum}
-        monthBasis="masapajak"
-        transactions={slipPopup.transactions}
-      />
+      {/* 3. Slip Detail Popup Modal */}
+      {slipPopup.isOpen && (
+        <SlipDetailPopup
+          isOpen={slipPopup.isOpen}
+          onClose={() => setSlipPopup((prev) => ({ ...prev, isOpen: false }))}
+          wpName={slipPopup.wpName}
+          kdmap={slipPopup.kdmap}
+          year={slipPopup.year}
+          monthNum={slipPopup.monthNum}
+          monthBasis={yearBasis === 'tahun' ? 'masapajak' : 'bulanbayar'}
+          transactions={slipPopup.transactions}
+        />
+      )}
     </div>
   );
 };

@@ -9,6 +9,7 @@ interface GlobalFilterProps {
   onMonthsChange: (months: number[]) => void;
   className?: string;
   isCompact?: boolean;
+  disableFlagSelection?: boolean;
 }
 
 export const GlobalFilter: React.FC<GlobalFilterProps> = ({
@@ -18,6 +19,7 @@ export const GlobalFilter: React.FC<GlobalFilterProps> = ({
   onMonthsChange,
   className = '',
   isCompact = false,
+  disableFlagSelection = false,
 }) => {
   const [isMonthDropdownOpen, setIsMonthDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -87,16 +89,27 @@ export const GlobalFilter: React.FC<GlobalFilterProps> = ({
           {/* 1. Flag Filter Segmented Control */}
           <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200/80 overflow-x-auto">
             {flagOptions.map((opt) => {
-              const isActive = flag === opt;
+              const isLockedSemua = disableFlagSelection;
+              const isEffectiveActive = isLockedSemua ? opt === 'Semua' : flag === opt;
+              const isDisabled = isLockedSemua && opt !== 'Semua';
+
               return (
                 <button
                   key={opt}
                   type="button"
-                  onClick={() => onFlagChange(opt)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap cursor-pointer ${
-                    isActive
-                      ? 'bg-blue-600 text-white shadow-xs font-semibold'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                  disabled={isDisabled}
+                  onClick={() => !isDisabled && onFlagChange(opt)}
+                  title={
+                    isDisabled
+                      ? 'Pengawasan Masa hanya mencakup Semua Flag'
+                      : `Pilih filter ${opt}`
+                  }
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap ${
+                    isDisabled
+                      ? 'opacity-35 cursor-not-allowed text-slate-400 bg-transparent'
+                      : isEffectiveActive
+                      ? 'bg-blue-600 text-white shadow-xs font-semibold cursor-pointer'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 cursor-pointer'
                   }`}
                 >
                   {opt === 'Semua' ? 'Semua Flag' : opt}
