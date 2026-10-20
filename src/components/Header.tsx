@@ -1,20 +1,14 @@
 import React from 'react';
-import { RefreshCw, ShieldCheck, Database, Activity, GitBranch } from 'lucide-react';
+import { RefreshCw, ShieldCheck } from 'lucide-react';
 
 interface HeaderProps {
   isLoading: boolean;
   onRefresh: () => void;
-  onOpenSupabaseConfig?: () => void;
-  onOpenDiagnostics?: () => void;
-  onOpenDeploymentGuide?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   isLoading,
   onRefresh,
-  onOpenSupabaseConfig,
-  onOpenDiagnostics,
-  onOpenDeploymentGuide,
 }) => {
   return (
     <header className="bg-slate-900 border-b border-slate-800 text-white">
@@ -41,41 +35,9 @@ export const Header: React.FC<HeaderProps> = ({
               </p>
             </div>
           </div>
+
           {/* Action Controls */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {onOpenSupabaseConfig && (
-              <button
-                type="button"
-                onClick={onOpenSupabaseConfig}
-                title="Konfigurasi Database Supabase"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer"
-              >
-                <Database className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Supabase</span>
-              </button>
-            )}
-            {onOpenDiagnostics && (
-              <button
-                type="button"
-                onClick={onOpenDiagnostics}
-                title="Diagnostik Data"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer"
-              >
-                <Activity className="w-3.5 h-3.5 text-blue-400" />
-                <span>Diagnostik</span>
-              </button>
-            )}
-            {onOpenDeploymentGuide && (
-              <button
-                type="button"
-                onClick={onOpenDeploymentGuide}
-                title="Panduan Deploy ke Vercel"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer"
-              >
-                <GitBranch className="w-3.5 h-3.5 text-amber-400" />
-                <span>Deploy</span>
-              </button>
-            )}
+          <div className="flex items-center gap-2">
             {/* Refresh Button */}
             <button
               onClick={onRefresh}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, GitBranch, Check, Copy } from 'lucide-react';
+import { X, GitBranch, Terminal, Globe, Key, Check, Copy } from 'lucide-react';
 
 interface DeploymentGuideModalProps {
   isOpen: boolean;
@@ -41,7 +41,7 @@ export const DeploymentGuideModal: React.FC<DeploymentGuideModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -78,7 +78,7 @@ git push -u origin main`}
                     1
                   )
                 }
-                className="absolute right-3 top-3 px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-[10px] text-slate-300 flex items-center gap-1 cursor-pointer"
+                className="absolute right-3 top-3 px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-[10px] text-slate-300 flex items-center gap-1"
               >
                 {copiedIndex === 1 ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                 <span>{copiedIndex === 1 ? 'Disalin' : 'Salin'}</span>

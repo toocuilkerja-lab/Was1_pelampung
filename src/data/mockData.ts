@@ -16,24 +16,31 @@ export const MOCK_TARGETS: TargetRow[] = [
   // 1. Ardiansyach
   { nama: 'Ardiansyach', flag: 'PPM', nominal: 22500000000 },
   { nama: 'Ardiansyach', flag: 'PKM', nominal: 9800000000 },
+
   // 2. Budi Santoso
   { nama: 'Budi Santoso', flag: 'PPM', nominal: 19800000000 },
   { nama: 'Budi Santoso', flag: 'PKM', nominal: 8500000000 },
+
   // 3. Citra Dewi Maharani
   { nama: 'Citra Dewi Maharani', flag: 'PPM', nominal: 24000000000 },
   { nama: 'Citra Dewi Maharani', flag: 'PKM', nominal: 11200000000 },
+
   // 4. Dedy Kurniawan
   { nama: 'Dedy Kurniawan', flag: 'PPM', nominal: 18500000000 },
   { nama: 'Dedy Kurniawan', flag: 'PKM', nominal: 7900000000 },
+
   // 5. Eko Prasetyo
   { nama: 'Eko Prasetyo', flag: 'PPM', nominal: 21000000000 },
   { nama: 'Eko Prasetyo', flag: 'PKM', nominal: 9200000000 },
+
   // 6. Fitri Handayani
   { nama: 'Fitri Handayani', flag: 'PPM', nominal: 23200000000 },
   { nama: 'Fitri Handayani', flag: 'PKM', nominal: 10500000000 },
+
   // 7. Gilang Ramadhan
   { nama: 'Gilang Ramadhan', flag: 'PPM', nominal: 17800000000 },
   { nama: 'Gilang Ramadhan', flag: 'PKM', nominal: 8100000000 },
+
   // 8. Hendra Wijaya
   { nama: 'Hendra Wijaya', flag: 'PPM', nominal: 20500000000 },
   { nama: 'Hendra Wijaya', flag: 'PKM', nominal: 8900000000 },
@@ -126,6 +133,7 @@ function generateMockRealisasi(): RealisasiRow[] {
         const flag = FLAGS[(arIndex + wpIndex + month * 2) % FLAGS.length];
         const kdmap = MAP_CODES[(wpIndex + month) % MAP_CODES.length];
         const kdbayar = KODE_BAYAR[(month + wpIndex) % KODE_BAYAR.length];
+
         // 2026 amount has some growth/variation compared to 2025
         const growthFactor = 1.05 + ((arIndex % 3 === 0 ? 0.15 : arIndex % 2 === 0 ? -0.06 : 0.08));
         const baseAmount = Math.round((165000000 + ((arIndex * 41 + wpIndex * 61 + month * 23) % 400) * 1400000) * growthFactor);

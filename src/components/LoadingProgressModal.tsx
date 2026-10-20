@@ -21,7 +21,7 @@ export const LoadingProgressModal: React.FC<LoadingProgressModalProps> = ({
   const getStageMessage = () => {
     if (stageText) return stageText;
     if (roundedProgress < 25) {
-      return 'Menginisialisasi kredensial koneksi Supabase...';
+      return 'Menginisialisasi koneksi data penerimaan...';
     } else if (roundedProgress < 50) {
       return 'Mengambil target penerimaan Seksi Pengawasan I (952_was1_target)...';
     } else if (roundedProgress < 85) {
@@ -62,7 +62,7 @@ export const LoadingProgressModal: React.FC<LoadingProgressModalProps> = ({
             {isFinished ? 'Data Siap Ditampilkan' : 'Memuat Data Penerimaan Pajak'}
           </h3>
           <p className="text-xs text-slate-400 mt-1 max-w-xs">
-            Seksi Pengawasan I • Mengambil Data Langsung dari Supabase
+            Seksi Pengawasan I • Sinkronisasi Data Penerimaan Pajak
           </p>
         </div>
 

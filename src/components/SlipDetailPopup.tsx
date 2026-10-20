@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { RealisasiRow, MAP_DESCRIPTIONS, MONTHS } from '../types/tax';
 import { formatRupiah } from '../utils/taxCalculations';
-import { X, Receipt, Download, FileText } from 'lucide-react';
+import { X, Receipt, Building2, Calendar, FileText, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 
 interface SlipDetailPopupProps {
   isOpen: boolean;
@@ -13,6 +13,9 @@ interface SlipDetailPopupProps {
   monthBasis?: 'bulanbayar' | 'masapajak';
   transactions: RealisasiRow[];
 }
+
+type SortField = 'kdmap' | 'kdbayar' | 'masa' | 'tahun' | 'tahunbayar' | 'bulanbayar' | 'flag' | 'nominal';
+type SortDirection = 'asc' | 'desc';
 
 export const SlipDetailPopup: React.FC<SlipDetailPopupProps> = ({
   isOpen,
@@ -26,6 +29,9 @@ export const SlipDetailPopup: React.FC<SlipDetailPopupProps> = ({
 }) => {
   if (!isOpen) return null;
 
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
   const mapDescription = MAP_DESCRIPTIONS[kdmap] || 'Pajak';
   const isTahunan = monthNum === 0;
   const monthName = monthNum !== undefined
@@ -34,44 +40,53 @@ export const SlipDetailPopup: React.FC<SlipDetailPopupProps> = ({
 
   const totalNominal = transactions.reduce((acc, t) => acc + Number(t.nominal || 0), 0);
 
-  const handleExportCSV = () => {
-    const headers = [
-      'No',
-      'Nama Wajib Pajak',
-      'MAP',
-      'Kode Bayar',
-      'Masa Pajak',
-      'Tahun Pajak',
-      'Tahun Bayar',
-      'Bulan Bayar',
-      'Flag',
-      'Nominal',
-    ];
-    const rows = transactions.map((t, idx) => [
-      idx + 1,
-      `"${t.namawp}"`,
-      `"${t.kdmap}"`,
-      `"${t.kdbayar}"`,
-      `"${t.masa}"`,
-      t.tahun,
-      t.tahunbayar,
-      t.bulanbayar,
-      `"${t.flag}"`,
-      t.nominal,
-    ]);
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDirection(field === 'nominal' ? 'desc' : 'asc');
+    }
+  };
 
-    const csvContent = [headers.join(';'), ...rows.map((r) => r.join(';'))].join('\n');
-    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute(
-      'download',
-      `Rincian_Slip_${wpName.replace(/\s+/g, '_')}_${kdmap}_Thn${year}${monthNum !== undefined ? `_Bln${monthNum}` : ''}.csv`
+  const sortedTransactions = useMemo(() => {
+    if (!sortField) return transactions;
+    return [...transactions].sort((a, b) => {
+      const valA = a[sortField];
+      const valB = b[sortField];
+
+      if (sortField === 'nominal' || sortField === 'tahun' || sortField === 'tahunbayar' || sortField === 'bulanbayar') {
+        const numA = Number(valA || 0);
+        const numB = Number(valB || 0);
+        return sortDirection === 'asc' ? numA - numB : numB - numA;
+      }
+
+      if (sortField === 'kdbayar' || sortField === 'masa' || sortField === 'kdmap') {
+        const numA = Number(valA);
+        const numB = Number(valB);
+        if (!isNaN(numA) && !isNaN(numB)) {
+          return sortDirection === 'asc' ? numA - numB : numB - numA;
+        }
+        return sortDirection === 'asc'
+          ? String(valA || '').localeCompare(String(valB || ''))
+          : String(valB || '').localeCompare(String(valA || ''));
+      }
+
+      const strA = String(valA || '');
+      const strB = String(valB || '');
+      return sortDirection === 'asc' ? strA.localeCompare(strB) : strB.localeCompare(strA);
+    });
+  }, [transactions, sortField, sortDirection]);
+
+  const renderSortIcon = (field: SortField) => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60 inline ml-1" />;
+    }
+    return sortDirection === 'asc' ? (
+      <ArrowUp className="w-3 h-3 text-blue-600 inline ml-1 font-bold" />
+    ) : (
+      <ArrowDown className="w-3 h-3 text-blue-600 inline ml-1 font-bold" />
     );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
   return (
@@ -114,20 +129,13 @@ export const SlipDetailPopup: React.FC<SlipDetailPopupProps> = ({
               </h3>
             </div>
           </div>
+
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleExportCSV}
-              disabled={transactions.length === 0}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors disabled:opacity-50 cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Export CSV</span>
-            </button>
             <button
               type="button"
               onClick={onClose}
               className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              title="Tutup (Esc)"
             >
               <X className="w-5 h-5" />
             </button>
@@ -143,6 +151,7 @@ export const SlipDetailPopup: React.FC<SlipDetailPopupProps> = ({
             </span>
             <span className="font-semibold text-slate-900">{mapDescription}</span>
           </div>
+
           <div className="flex items-center gap-4 text-xs font-medium">
             <div>
               <span className="text-slate-500">Jumlah Transaksi: </span>
@@ -172,22 +181,93 @@ export const SlipDetailPopup: React.FC<SlipDetailPopupProps> = ({
                   <thead className="bg-slate-100 text-[11px] font-bold text-slate-700 uppercase tracking-wider border-b border-slate-200 select-none">
                     <tr>
                       <th className="py-2.5 px-3 text-center w-10 text-slate-400">No</th>
-                      <th className="py-2.5 px-3 font-bold text-slate-800">Kode MAP</th>
-                      <th className="py-2.5 px-3 text-center font-bold text-slate-800">Kode Bayar</th>
-                      <th className="py-2.5 px-3 text-center font-bold text-slate-800">Masa Pajak</th>
-                      <th className="py-2.5 px-3 text-center font-bold text-slate-800">Tahun Pajak</th>
-                      <th className="py-2.5 px-3 text-center font-bold text-slate-800">Tahun Bayar</th>
-                      <th className="py-2.5 px-3 text-center font-bold text-slate-800">Bulan Bayar</th>
-                      <th className="py-2.5 px-3 text-center font-bold text-slate-800">Flag</th>
-                      <th className="py-2.5 px-4 text-right font-bold text-blue-900 bg-blue-50/60 border-l border-blue-100">
-                        Nominal Setoran
+                      <th
+                        onClick={() => handleSort('kdmap')}
+                        className="py-2.5 px-3 font-bold text-slate-800 cursor-pointer hover:bg-slate-200 transition-colors"
+                        title="Urutkan berdasarkan Kode MAP"
+                      >
+                        <div className="flex items-center gap-1">
+                          <span>Kode MAP</span>
+                          {renderSortIcon('kdmap')}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleSort('kdbayar')}
+                        className="py-2.5 px-3 text-center font-bold text-slate-800 cursor-pointer hover:bg-slate-200 transition-colors"
+                        title="Urutkan berdasarkan Kode Bayar"
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          <span>Kode Bayar</span>
+                          {renderSortIcon('kdbayar')}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleSort('masa')}
+                        className="py-2.5 px-3 text-center font-bold text-slate-800 cursor-pointer hover:bg-slate-200 transition-colors"
+                        title="Urutkan berdasarkan Masa Pajak"
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          <span>Masa Pajak</span>
+                          {renderSortIcon('masa')}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleSort('tahun')}
+                        className="py-2.5 px-3 text-center font-bold text-slate-800 cursor-pointer hover:bg-slate-200 transition-colors"
+                        title="Urutkan berdasarkan Tahun Pajak"
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          <span>Tahun Pajak</span>
+                          {renderSortIcon('tahun')}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleSort('tahunbayar')}
+                        className="py-2.5 px-3 text-center font-bold text-slate-800 cursor-pointer hover:bg-slate-200 transition-colors"
+                        title="Urutkan berdasarkan Tahun Bayar"
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          <span>Tahun Bayar</span>
+                          {renderSortIcon('tahunbayar')}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleSort('bulanbayar')}
+                        className="py-2.5 px-3 text-center font-bold text-slate-800 cursor-pointer hover:bg-slate-200 transition-colors"
+                        title="Urutkan berdasarkan Bulan Bayar"
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          <span>Bulan Bayar</span>
+                          {renderSortIcon('bulanbayar')}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleSort('flag')}
+                        className="py-2.5 px-3 text-center font-bold text-slate-800 cursor-pointer hover:bg-slate-200 transition-colors"
+                        title="Urutkan berdasarkan Flag"
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          <span>Flag</span>
+                          {renderSortIcon('flag')}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleSort('nominal')}
+                        className="py-2.5 px-4 text-right font-bold text-blue-900 bg-blue-50/60 border-l border-blue-100 cursor-pointer hover:bg-blue-100/70 transition-colors"
+                        title="Urutkan berdasarkan Nominal Setoran"
+                      >
+                        <div className="flex items-center justify-end gap-1">
+                          <span>Nominal Setoran</span>
+                          {renderSortIcon('nominal')}
+                        </div>
                       </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {transactions.map((tx, idx) => {
+                    {sortedTransactions.map((tx, idx) => {
                       const mObj = MONTHS.find((m) => m.value === tx.bulanbayar);
                       const mLabel = mObj ? `${mObj.label} (${tx.bulanbayar})` : tx.bulanbayar;
+
                       return (
                         <tr key={idx} className="hover:bg-blue-50/40 transition-colors">
                           <td className="py-2 px-3 text-center font-mono text-slate-400">
@@ -259,14 +339,6 @@ export const SlipDetailPopup: React.FC<SlipDetailPopupProps> = ({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={handleExportCSV}
-              disabled={transactions.length === 0}
-              className="sm:hidden px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-100 text-slate-700"
-            >
-              Export CSV
-            </button>
-            <button
-              type="button"
               onClick={onClose}
               className="px-4 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
             >
@@ -278,3 +350,4 @@ export const SlipDetailPopup: React.FC<SlipDetailPopupProps> = ({
     </div>
   );
 };
+

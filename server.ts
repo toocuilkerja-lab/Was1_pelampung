@@ -20,6 +20,7 @@ app.get('/api/supabase-config', (_req, res) => {
     process.env.SUPABASE_URL ||
     process.env.SUPABASE_PROJECT_URL ||
     '';
+
   const anonKey =
     process.env.VITE_SUPABASE_ANON_KEY ||
     process.env.SUPABASE_ANON_KEY ||
@@ -58,6 +59,7 @@ async function startServer() {
       },
       appType: 'spa',
     });
+
     app.use(vite.middlewares);
   } else {
     // Production mode: serve built static assets

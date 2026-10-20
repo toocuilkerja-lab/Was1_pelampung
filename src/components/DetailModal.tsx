@@ -4,7 +4,6 @@ import { matchesFlagFilter, formatRupiah, formatPercent } from '../utils/taxCalc
 import {
   X,
   Search,
-  Download,
   Filter,
   Calendar,
   Building2,
@@ -56,6 +55,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({
   const [modalMonths, setModalMonths] = useState<number[]>(globalMonths);
   // Tambahan filter khusus PPM: 'bulanbayar' (default) vs 'masapajak' (bulan masa pajak 01-12)
   const [ppmFilterBasis, setPpmFilterBasis] = useState<'bulanbayar' | 'masapajak'>('bulanbayar');
+
   const [searchQuery, setSearchQuery] = useState('');
   const [isMonthDropdownOpen, setIsMonthDropdownOpen] = useState(false);
   const [expandedWPs, setExpandedWPs] = useState<Set<string>>(new Set());
@@ -177,7 +177,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  // 1. Filter rows for this AR matching modal flag and active month basis
+  // 1. Filter rows for this AR matching modal flag and active month basis (Bulan Bayar vs Bulan Masa Pajak jika PPM)
   const arRows = useMemo(() => {
     const isMasaBasis = modalFlag === 'PPM' && ppmFilterBasis === 'masapajak';
     return allRealisasiRows.filter((r) => {
@@ -190,6 +190,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({
   }, [allRealisasiRows, namaAR, modalFlag, modalMonths, ppmFilterBasis]);
 
   // 2. Aggregate per Wajib Pajak: Nama WP, 2026, 2025, Selisih, Tumbuh (%)
+  // "khusus filter diatas maka menggunkaan tahun (tahun pajak) bukan tahun bayar"
   const wpSummaries: WPSummaryRow[] = useMemo(() => {
     const isMasaBasis = modalFlag === 'PPM' && ppmFilterBasis === 'masapajak';
     const map = new Map<string, {
@@ -214,9 +215,10 @@ export const DetailModal: React.FC<DetailModalProps> = ({
       }
       const entry = map.get(row.namawp)!;
       entry.allTransactions.push(row);
-      const nom = Number(row.nominal) || 0;
-      const txYr = getTxYear(row, isMasaBasis);
 
+      const nom = Number(row.nominal) || 0;
+      // Gunakan Tahun Pajak jika isMasaBasis, sebaliknya gunakan Tahun Bayar
+      const txYr = getTxYear(row, isMasaBasis);
       if (txYr === 2026) {
         entry.realisasi2026 += nom;
         entry.txCount2026 += 1;
@@ -234,6 +236,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({
           : item.realisasi2026 > 0
           ? 100
           : 0;
+
       return {
         ...item,
         selisih,
@@ -258,11 +261,13 @@ export const DetailModal: React.FC<DetailModalProps> = ({
     return [...wpSummaries].sort((a, b) => {
       let aVal = a[sortField];
       let bVal = b[sortField];
+
       if (typeof aVal === 'string') {
         return sortOrder === 'asc'
           ? (aVal as string).localeCompare(bVal as string)
           : (bVal as string).localeCompare(aVal as string);
       }
+
       return sortOrder === 'asc'
         ? (aVal as number) - (bVal as number)
         : (bVal as number) - (aVal as number);
@@ -352,28 +357,47 @@ export const DetailModal: React.FC<DetailModalProps> = ({
     });
   };
 
-  // Export CSV
-  const handleExportCSV = () => {
-    const headers = ['No', 'Nama AR', 'Nama Wajib Pajak', 'Realisasi 2026', 'Realisasi 2025', 'Selisih', 'Tumbuh (%)'];
-    const rows = sortedWPSummaries.map((wp, idx) => [
-      idx + 1,
-      `"${namaAR}"`,
-      `"${wp.namawp}"`,
-      wp.realisasi2026,
-      wp.realisasi2025,
-      wp.selisih,
-      `${wp.pertumbuhan.toFixed(2)}%`,
-    ]);
-    const csvContent = [headers.join(';'), ...rows.map((r) => r.join(';'))].join('\n');
-    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `Rincian_WP_${namaAR.replace(/\s+/g, '_')}_${modalFlag}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  // Sorting for Secondary Flat Transactions View
+  type FlatSortField = 'namawp' | 'kdmap' | 'kdbayar' | 'masa' | 'tahun' | 'tahunbayar' | 'bulanbayar' | 'flag' | 'nominal';
+  const [flatSortField, setFlatSortField] = useState<FlatSortField>('nominal');
+  const [flatSortOrder, setFlatSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  const handleFlatSort = (field: FlatSortField) => {
+    if (flatSortField === field) {
+      setFlatSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setFlatSortField(field);
+      setFlatSortOrder(field === 'namawp' ? 'asc' : 'desc');
+    }
   };
+
+  const sortedArRows = useMemo(() => {
+    return [...arRows].sort((a, b) => {
+      const valA = a[flatSortField];
+      const valB = b[flatSortField];
+
+      if (flatSortField === 'nominal' || flatSortField === 'tahun' || flatSortField === 'tahunbayar' || flatSortField === 'bulanbayar') {
+        const numA = Number(valA || 0);
+        const numB = Number(valB || 0);
+        return flatSortOrder === 'asc' ? numA - numB : numB - numA;
+      }
+
+      if (flatSortField === 'kdbayar' || flatSortField === 'masa' || flatSortField === 'kdmap') {
+        const numA = Number(valA);
+        const numB = Number(valB);
+        if (!isNaN(numA) && !isNaN(numB)) {
+          return flatSortOrder === 'asc' ? numA - numB : numB - numA;
+        }
+        return flatSortOrder === 'asc'
+          ? String(valA || '').localeCompare(String(valB || ''))
+          : String(valB || '').localeCompare(String(valA || ''));
+      }
+
+      const strA = String(valA || '');
+      const strB = String(valB || '');
+      return flatSortOrder === 'asc' ? strA.localeCompare(strB) : strB.localeCompare(strA);
+    });
+  }, [arRows, flatSortField, flatSortOrder]);
 
   const flagOptions: FlagFilter[] = ['Semua', 'PPM', 'PKM', 'PKM P3'];
 
@@ -421,16 +445,8 @@ export const DetailModal: React.FC<DetailModalProps> = ({
               </h2>
             </div>
           </div>
+
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleExportCSV}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer"
-              title="Unduh Tabel WP ke file CSV / Excel"
-            >
-              <Download className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Export CSV</span>
-            </button>
             <button
               type="button"
               onClick={onClose}
@@ -442,7 +458,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({
           </div>
         </div>
 
-        {/* Modal Filter Bar */}
+        {/* Modal Filter Bar (CRITICAL REQUIREMENT: Filter Flag and Bulan Bayar inside Modal) */}
         <div className="px-6 py-3.5 bg-slate-50 border-b border-slate-200 shrink-0 flex flex-col gap-3">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             {/* Filter Controls: Flag & Bulan Bayar */}
@@ -502,7 +518,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                 </div>
               )}
 
-              {/* Bulan Selector inside Modal */}
+              {/* Bulan Selector inside Modal (Bulan Bayar atau Bulan Masa Pajak) */}
               <div className="relative shrink-0">
                 <button
                   type="button"
@@ -590,13 +606,13 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                               : MONTHS.map((m) => m.value)
                           )
                         }
-                        className="text-blue-600 hover:underline font-medium cursor-pointer"
+                        className="text-blue-600 hover:underline font-medium"
                       >
                         Pilih Semua
                       </button>
                       <button
                         onClick={() => setIsMonthDropdownOpen(false)}
-                        className="px-2.5 py-0.5 bg-slate-900 text-white rounded font-medium cursor-pointer"
+                        className="px-2.5 py-0.5 bg-slate-900 text-white rounded font-medium"
                       >
                         Selesai
                       </button>
@@ -720,8 +736,10 @@ export const DetailModal: React.FC<DetailModalProps> = ({
               </button>
             </div>
           ) : viewMode === 'wp_summary' ? (
-            /* PRIMARY DRILL-DOWN TABLE:
-               Columns: Nama Wajib Pajak, 2026, 2025, Selisih, Tumbuh */
+            /* =========================================================================
+               PRIMARY DRILL-DOWN TABLE REQUESTED BY USER:
+               Columns: Nama Wajib Pajak, 2026, 2025, Selisih, Tumbuh
+               ========================================================================= */
             <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
               <div className="px-4 py-2.5 bg-slate-100/70 border-b border-slate-200 flex items-center justify-between text-xs text-slate-600">
                 <span className="font-semibold text-slate-800">
@@ -798,6 +816,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                       </th>
                     </tr>
                   </thead>
+
                   <tbody className="divide-y divide-slate-100">
                     {sortedWPSummaries.map((wp, idx) => {
                       const isExpanded = expandedWPs.has(wp.namawp);
@@ -894,45 +913,19 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                             </td>
                           </tr>
 
-                          {/* Expanded Transaction Details for this WP */}
+                          {/* Expanded Transaction Details for this WP: Perbandingan per Bulan Bayar & MAP */}
                           {isExpanded && (
                             <tr className="bg-slate-50/90">
-                              <td colSpan={7} className="p-3 sm:p-5">
-                                <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-                                  {/* Section Header */}
-                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 pb-3 border-b border-slate-100">
-                                    <div>
-                                      <h4 className="text-xs font-bold text-slate-900 flex items-center gap-2 flex-wrap">
-                                        <span>
-                                          Rincian Slip: Perbandingan per{' '}
-                                          {modalFlag === 'PPM' && ppmFilterBasis === 'masapajak' ? 'Bulan (Masa Pajak)' : 'Bulan Bayar'}{' '}
-                                          & MAP
-                                        </span>
-                                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
-                                          {wp.namawp}
-                                        </span>
-                                        {modalFlag === 'PPM' && (
-                                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
-                                            Basis: {ppmFilterBasis === 'masapajak' ? 'Masa Pajak (01-12)' : 'Bulan Bayar (1-12)'}
-                                          </span>
-                                        )}
-                                      </h4>
-                                      <p className="text-[11px] text-slate-500 mt-0.5">
-                                        {modalFlag === 'PPM' && ppmFilterBasis === 'masapajak'
-                                          ? 'Perbandingan realisasi 2026 vs 2025 per bulan Masa Pajak (01 s.d. 12) sesuai filter yang aktif'
-                                          : 'Perbandingan realisasi 2026 vs 2025 per bulan pembayaran sesuai filter yang aktif'}
-                                      </p>
-                                    </div>
-                                    <div className="text-[11px] text-slate-500 flex items-center gap-2">
-                                      <span>Filter Flag: <strong>{modalFlag}</strong></span>
-                                      <span>•</span>
-                                      <span>{modalMonths.length} Bulan</span>
-                                    </div>
-                                  </div>
-
-                                  {/* Comparison Table by MAP and Months */}
+                              <td colSpan={7} className="p-3 sm:p-4">
+                                <div className="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 shadow-sm">
+                                  {/* The Comparison Table requested by user:
+                                      Columns: +- (untuk expand n collaps field), MAP, 2026, 2025, selisih, tumbuh
+                                      a. MAP Asc
+                                      b. Jika misal MAP 411121 diklik expand maka akan muncul bulan 01-12 */}
                                   {(() => {
                                     const isMasaBasis = modalFlag === 'PPM' && ppmFilterBasis === 'masapajak';
+
+                                    // a. Distinct MAPs sorted Ascending
                                     const distinctMAPs = Array.from(
                                       new Set(wp.allTransactions.map((tx) => String(tx.kdmap)))
                                     ).sort((a, b) => a.localeCompare(b));
@@ -945,10 +938,12 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                                       );
                                     }
 
+                                    // Pre-calculate per MAP and per month for this WP
                                     const mapData = distinctMAPs.map((kdmap) => {
                                       const mapKey = `${wp.namawp}_${kdmap}`;
                                       const isMapExpanded = expandedMAPs.has(mapKey);
 
+                                      // Filter tx for this MAP respecting modalFlag, active month filter, and ppmFilterBasis
                                       const filteredTx = wp.allTransactions.filter((tx) => {
                                         if (String(tx.kdmap) !== kdmap) return false;
                                         if (!matchesFlagFilter(tx.flag, modalFlag)) return false;
@@ -957,12 +952,15 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                                         return true;
                                       });
 
+                                      // MAP totals
                                       const nominal2026 = filteredTx
                                         .filter((tx) => getTxYear(tx, isMasaBasis) === 2026)
                                         .reduce((sum, tx) => sum + Number(tx.nominal || 0), 0);
+
                                       const nominal2025 = filteredTx
                                         .filter((tx) => getTxYear(tx, isMasaBasis) === 2025)
                                         .reduce((sum, tx) => sum + Number(tx.nominal || 0), 0);
+
                                       const selisih = nominal2026 - nominal2025;
                                       const pertumbuhan =
                                         nominal2025 > 0
@@ -971,6 +969,8 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                                           ? 100
                                           : 0;
 
+                                      // b. Monthly breakdown 01-12 (dan 00 - Tahunan jika isMasaBasis)
+                                      // "jika kdbayar = 200 maka pada kolom MAP untuk masa pajak = 00 - Tahunan ditaruh dibawah 12 - Masa Pajak desember"
                                       const breakdownItems = isMasaBasis
                                         ? [
                                             ...MONTHS.map((m) => ({
@@ -1009,9 +1009,11 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                                         const m2026 = monthTx
                                           .filter((tx) => getTxYear(tx, isMasaBasis) === 2026)
                                           .reduce((sum, tx) => sum + Number(tx.nominal || 0), 0);
+
                                         const m2025 = monthTx
                                           .filter((tx) => getTxYear(tx, isMasaBasis) === 2025)
                                           .reduce((sum, tx) => sum + Number(tx.nominal || 0), 0);
+
                                         const mSelisih = m2026 - m2025;
                                         const mGrowth =
                                           m2025 > 0
@@ -1057,6 +1059,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({
 
                                     return (
                                       <div className="space-y-2">
+                                        {/* Toggle All MAPs Button */}
                                         <div className="flex justify-end">
                                           <button
                                             type="button"
@@ -1067,8 +1070,10 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                                             <span>{allMapsExpanded ? 'Tutup Semua Bulan MAP' : 'Buka Semua Bulan (01-12) MAP'}</span>
                                           </button>
                                         </div>
+
                                         <div className="overflow-x-auto rounded-lg border border-slate-200 shadow-2xs">
                                           <table className="w-full text-left text-xs border-collapse">
+                                            {/* Table Header: +- , MAP, 2026, 2025, selisih, tumbuh */}
                                             <thead className="bg-slate-100 text-[11px] font-bold text-slate-700 uppercase tracking-wider border-b border-slate-200">
                                               <tr>
                                                 <th className="py-2.5 px-3 text-center w-12 text-slate-600">
@@ -1091,12 +1096,16 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                                                 </th>
                                               </tr>
                                             </thead>
+
                                             <tbody className="divide-y divide-slate-100">
                                               {mapData.map((m) => {
                                                 const isGrowthPos = m.pertumbuhan >= 0;
+
                                                 return (
                                                   <React.Fragment key={m.kdmap}>
+                                                    {/* Parent MAP Row */}
                                                     <tr className="bg-slate-50/70 hover:bg-slate-100/80 transition-colors font-semibold">
+                                                      {/* +- Button */}
                                                       <td className="py-2.5 px-3 text-center">
                                                         <button
                                                           type="button"
@@ -1107,6 +1116,8 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                                                           {m.isMapExpanded ? '[-]' : '[+]'}
                                                         </button>
                                                       </td>
+
+                                                      {/* MAP Description */}
                                                       <td className="py-2.5 px-4 text-slate-900 font-bold">
                                                         <div className="flex items-center gap-2">
                                                           <span className="font-mono bg-white px-2 py-0.5 rounded border border-slate-200 text-blue-950 font-bold">
@@ -1117,6 +1128,8 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                                                           </span>
                                                         </div>
                                                       </td>
+
+                                                      {/* 2026 */}
                                                       <td className="py-2.5 px-4 text-right font-mono font-bold text-blue-950 bg-blue-50/30 border-x border-blue-100 whitespace-nowrap">
                                                         <button
                                                           type="button"
@@ -1127,6 +1140,8 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                                                           {formatRupiah(m.nominal2026)}
                                                         </button>
                                                       </td>
+
+                                                      {/* 2025 */}
                                                       <td className="py-2.5 px-4 text-right font-mono font-bold text-slate-800 whitespace-nowrap">
                                                         <button
                                                           type="button"
@@ -1137,6 +1152,8 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                                                           {formatRupiah(m.nominal2025)}
                                                         </button>
                                                       </td>
+
+                                                      {/* Selisih */}
                                                       <td
                                                         className={`py-2.5 px-4 text-right font-mono font-bold whitespace-nowrap ${
                                                           m.selisih < 0 ? 'text-rose-600' : 'text-emerald-700'
@@ -1144,6 +1161,8 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                                                       >
                                                         {formatRupiah(m.selisih)}
                                                       </td>
+
+                                                      {/* Tumbuh */}
                                                       <td className="py-2.5 px-4 text-center whitespace-nowrap">
                                                         <span
                                                           className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold ${
@@ -1157,7 +1176,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                                                       </td>
                                                     </tr>
 
-                                                    {/* Child Rows: Bulan 01-12 */}
+                                                    {/* Child Rows: Bulan 01-12 (Rendered when expanded) */}
                                                     {m.isMapExpanded &&
                                                       m.monthsBreakdown.map((mb) => {
                                                         const isMonthPos = mb.pertumbuhan >= 0;
@@ -1174,6 +1193,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                                                                 : 'bg-white hover:bg-blue-50/30'
                                                             }`}
                                                           >
+                                                            {/* Empty +- cell */}
                                                             <td className="py-1.5 px-3 text-center text-slate-300">
                                                               {mb.isTahunan ? (
                                                                 <span className="text-amber-600 font-bold">•</span>
@@ -1181,9 +1201,11 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                                                                 '•'
                                                               )}
                                                             </td>
+
+                                                            {/* Indented Month Name: 01-12 atau 00 - Tahunan */}
                                                             <td className="py-1.5 px-4">
                                                               <div className="pl-6 text-slate-700 flex items-center gap-2">
-                                                                <span className={mb.isTahunan ? 'text-amber-500 font-bold' : 'text-slate-400 font-bold'}>└</span>
+                                                                <span className={mb.isTahunan ? 'text-amber-500 font-bold' : 'text-slate-400 font-bold'}>•</span>
                                                                 <span
                                                                   className={`font-mono text-xs ${
                                                                     mb.isTahunan
@@ -1200,6 +1222,8 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                                                                 )}
                                                               </div>
                                                             </td>
+
+                                                            {/* 2026 */}
                                                             <td className="py-1.5 px-4 text-right font-mono text-xs border-x border-slate-100 whitespace-nowrap">
                                                               <button
                                                                 type="button"
@@ -1214,6 +1238,8 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                                                                 {formatRupiah(mb.nominal2026)}
                                                               </button>
                                                             </td>
+
+                                                            {/* 2025 */}
                                                             <td className="py-1.5 px-4 text-right font-mono text-xs whitespace-nowrap">
                                                               <button
                                                                 type="button"
@@ -1228,6 +1254,8 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                                                                 {formatRupiah(mb.nominal2025)}
                                                               </button>
                                                             </td>
+
+                                                            {/* Selisih */}
                                                             <td
                                                               className={`py-1.5 px-4 text-right font-mono text-xs whitespace-nowrap ${
                                                                 mb.selisih === 0
@@ -1239,6 +1267,8 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                                                             >
                                                               {formatRupiah(mb.selisih)}
                                                             </td>
+
+                                                            {/* Tumbuh */}
                                                             <td className="py-1.5 px-4 text-center whitespace-nowrap">
                                                               <span
                                                                 className={`inline-block px-1.5 py-0.2 rounded text-[10px] font-mono font-medium ${
@@ -1260,9 +1290,11 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                                               })}
                                             </tbody>
 
+                                            {/* Total Summary Footer Row */}
                                             <tfoot className="bg-slate-900 text-white font-bold border-t-2 border-slate-700 text-xs">
                                               <tr>
                                                 <td className="py-3 px-3 text-center text-slate-400">
+                                                  Σ
                                                 </td>
                                                 <td className="py-3 px-4 font-bold tracking-tight">
                                                   TOTAL SELURUH MAP ({distinctMAPs.length} MAP)
@@ -1325,6 +1357,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                   <tfoot className="bg-slate-900 text-white font-bold border-t-2 border-slate-700">
                     <tr>
                       <td className="py-3.5 px-3 text-center text-xs text-slate-400">
+                        Σ
                       </td>
                       <td className="py-3.5 px-4 text-xs font-bold tracking-tight">
                         TOTAL SELURUH WP (AR {namaAR})
@@ -1362,46 +1395,156 @@ export const DetailModal: React.FC<DetailModalProps> = ({
               </div>
             </div>
           ) : (
-            /* SECONDARY VIEW: FLAT TRANSACTIONS LIST */
+            /* =========================================================================
+               SECONDARY VIEW: FLAT TRANSACTIONS LIST
+               ========================================================================= */
             <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs text-slate-700 border-collapse">
-                  <thead className="bg-slate-100 text-[11px] font-semibold text-slate-600 uppercase tracking-wider border-b border-slate-200">
+                  <thead className="bg-slate-100 text-[11px] font-semibold text-slate-600 uppercase tracking-wider border-b border-slate-200 select-none">
                     <tr>
                       <th scope="col" className="py-2.5 px-3 text-center w-10 text-slate-400">
                         No
                       </th>
-                      <th scope="col" className="py-2.5 px-4 font-bold text-slate-800">
-                        Nama Wajib Pajak (WP)
+                      <th
+                        scope="col"
+                        onClick={() => handleFlatSort('namawp')}
+                        className="py-2.5 px-4 font-bold text-slate-800 cursor-pointer hover:bg-slate-200 transition-colors"
+                        title="Urutkan berdasarkan Nama WP"
+                      >
+                        <div className="flex items-center gap-1">
+                          <span>Nama Wajib Pajak (WP)</span>
+                          {flatSortField === 'namawp' ? (
+                            flatSortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-blue-600" /> : <ArrowDown className="w-3 h-3 text-blue-600" />
+                          ) : (
+                            <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
+                          )}
+                        </div>
                       </th>
-                      <th scope="col" className="py-2.5 px-3 text-center">
-                        MAP
+                      <th
+                        scope="col"
+                        onClick={() => handleFlatSort('kdmap')}
+                        className="py-2.5 px-3 text-center cursor-pointer hover:bg-slate-200 transition-colors"
+                        title="Urutkan berdasarkan Kode MAP"
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          <span>MAP</span>
+                          {flatSortField === 'kdmap' ? (
+                            flatSortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-blue-600" /> : <ArrowDown className="w-3 h-3 text-blue-600" />
+                          ) : (
+                            <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
+                          )}
+                        </div>
                       </th>
-                      <th scope="col" className="py-2.5 px-3 text-center">
-                        Kode Bayar
+                      <th
+                        scope="col"
+                        onClick={() => handleFlatSort('kdbayar')}
+                        className="py-2.5 px-3 text-center cursor-pointer hover:bg-slate-200 transition-colors"
+                        title="Urutkan berdasarkan Kode Bayar"
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          <span>Kode Bayar</span>
+                          {flatSortField === 'kdbayar' ? (
+                            flatSortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-blue-600" /> : <ArrowDown className="w-3 h-3 text-blue-600" />
+                          ) : (
+                            <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
+                          )}
+                        </div>
                       </th>
-                      <th scope="col" className="py-2.5 px-3 text-center">
-                        Masa
+                      <th
+                        scope="col"
+                        onClick={() => handleFlatSort('masa')}
+                        className="py-2.5 px-3 text-center cursor-pointer hover:bg-slate-200 transition-colors"
+                        title="Urutkan berdasarkan Masa Pajak"
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          <span>Masa</span>
+                          {flatSortField === 'masa' ? (
+                            flatSortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-blue-600" /> : <ArrowDown className="w-3 h-3 text-blue-600" />
+                          ) : (
+                            <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
+                          )}
+                        </div>
                       </th>
-                      <th scope="col" className="py-2.5 px-3 text-center font-bold text-blue-900 bg-blue-50/50">
-                        Tahun Pajak
+                      <th
+                        scope="col"
+                        onClick={() => handleFlatSort('tahun')}
+                        className="py-2.5 px-3 text-center font-bold text-blue-900 bg-blue-50/50 cursor-pointer hover:bg-blue-100 transition-colors"
+                        title="Urutkan berdasarkan Tahun Pajak"
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          <span>Tahun Pajak</span>
+                          {flatSortField === 'tahun' ? (
+                            flatSortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-blue-600" /> : <ArrowDown className="w-3 h-3 text-blue-600" />
+                          ) : (
+                            <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
+                          )}
+                        </div>
                       </th>
-                      <th scope="col" className="py-2.5 px-3 text-center">
-                        Tahun Bayar
+                      <th
+                        scope="col"
+                        onClick={() => handleFlatSort('tahunbayar')}
+                        className="py-2.5 px-3 text-center cursor-pointer hover:bg-slate-200 transition-colors"
+                        title="Urutkan berdasarkan Tahun Bayar"
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          <span>Tahun Bayar</span>
+                          {flatSortField === 'tahunbayar' ? (
+                            flatSortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-blue-600" /> : <ArrowDown className="w-3 h-3 text-blue-600" />
+                          ) : (
+                            <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
+                          )}
+                        </div>
                       </th>
-                      <th scope="col" className="py-2.5 px-3 text-center">
-                        Bulan Bayar
+                      <th
+                        scope="col"
+                        onClick={() => handleFlatSort('bulanbayar')}
+                        className="py-2.5 px-3 text-center cursor-pointer hover:bg-slate-200 transition-colors"
+                        title="Urutkan berdasarkan Bulan Bayar"
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          <span>Bulan Bayar</span>
+                          {flatSortField === 'bulanbayar' ? (
+                            flatSortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-blue-600" /> : <ArrowDown className="w-3 h-3 text-blue-600" />
+                          ) : (
+                            <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
+                          )}
+                        </div>
                       </th>
-                      <th scope="col" className="py-2.5 px-3 text-center">
-                        Flag
+                      <th
+                        scope="col"
+                        onClick={() => handleFlatSort('flag')}
+                        className="py-2.5 px-3 text-center cursor-pointer hover:bg-slate-200 transition-colors"
+                        title="Urutkan berdasarkan Flag"
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          <span>Flag</span>
+                          {flatSortField === 'flag' ? (
+                            flatSortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-blue-600" /> : <ArrowDown className="w-3 h-3 text-blue-600" />
+                          ) : (
+                            <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
+                          )}
+                        </div>
                       </th>
-                      <th scope="col" className="py-2.5 px-4 text-right font-bold text-slate-900">
-                        Nominal Realisasi
+                      <th
+                        scope="col"
+                        onClick={() => handleFlatSort('nominal')}
+                        className="py-2.5 px-4 text-right font-bold text-slate-900 cursor-pointer hover:bg-slate-200 transition-colors"
+                        title="Urutkan berdasarkan Nominal Realisasi"
+                      >
+                        <div className="flex items-center justify-end gap-1">
+                          <span>Nominal Realisasi</span>
+                          {flatSortField === 'nominal' ? (
+                            flatSortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-blue-600" /> : <ArrowDown className="w-3 h-3 text-blue-600" />
+                          ) : (
+                            <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
+                          )}
+                        </div>
                       </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {arRows.map((row, idx) => (
+                    {sortedArRows.map((row, idx) => (
                       <tr key={idx} className="hover:bg-blue-50/50 transition-colors">
                         <td className="py-2 px-3 text-center font-mono text-slate-400">{idx + 1}</td>
                         <td className="py-2 px-4 font-semibold text-slate-900">{row.namawp}</td>
@@ -1436,13 +1579,6 @@ export const DetailModal: React.FC<DetailModalProps> = ({
             Menampilkan <span className="font-semibold text-slate-800">{wpSummaries.length}</span> Wajib Pajak untuk AR <strong>{namaAR}</strong> ({arRows.length} setoran pajak terfilter)
           </div>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleExportCSV}
-              className="sm:hidden px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
-            >
-              Export CSV
-            </button>
             <button
               type="button"
               onClick={onClose}

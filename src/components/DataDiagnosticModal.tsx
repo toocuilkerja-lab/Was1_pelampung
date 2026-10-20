@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import {
   X,
   Activity,
+  CheckCircle2,
   AlertTriangle,
   RefreshCw,
   Database,
+  Search,
   Layers,
   Calendar,
   Users,
@@ -16,6 +18,7 @@ import {
   runSupabaseDiagnostics,
   SupabaseDiagnosticReport,
   getDataSourceMode,
+  setDataSourceMode,
 } from '../lib/supabase';
 import { formatRupiah } from '../utils/taxCalculations';
 
@@ -88,13 +91,13 @@ export const DataDiagnosticModal: React.FC<DataDiagnosticModalProps> = ({
               onClick={loadDiagnostics}
               disabled={isLoading}
               title="Periksa Ulang"
-              className="p-2 rounded-lg bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors disabled:opacity-50 cursor-pointer"
+              className="p-2 rounded-lg bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
             <button
               onClick={onClose}
-              className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
@@ -172,6 +175,7 @@ export const DataDiagnosticModal: React.FC<DataDiagnosticModalProps> = ({
                       Mode Aktif: <strong className="text-slate-800">{currentMode}</strong>
                     </div>
                   </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                     <div>
                       <span className="text-slate-500 block">Supabase URL Terdeteksi:</span>
@@ -294,18 +298,18 @@ export const DataDiagnosticModal: React.FC<DataDiagnosticModalProps> = ({
                 {/* Petunjuk Solusi jika data belum sama */}
                 <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-4 space-y-2">
                   <h4 className="font-bold text-blue-900 flex items-center gap-1.5">
-                    <ShieldCheck className="w-4 h-4 text-blue-600" />
-                    <span>Panduan Integrasi Supabase:</span>
+                    <CheckCircle2 className="w-4 h-4 text-blue-600" />
+                    <span>Mengapa Sebelumnya Data Tampak Tidak Sama?</span>
                   </h4>
                   <ul className="list-disc pl-5 space-y-1 text-slate-700">
                     <li>
-                      <strong>Kredensial di AI Studio:</strong> Server-side handler otomatis membaca secret (<code>SUPABASE_URL</code>, <code>SUPABASE_KEY</code>, <code>VITE_SUPABASE_URL</code>, dll) atau melalui form manual.
+                      <strong>Nama Secret di AI Studio:</strong> Vite secara default hanya meneruskan variabel berawalan <code>VITE_</code> ke browser. Kini kami telah memasang server-side handler yang otomatis membaca secret apa pun (<code>SUPABASE_URL</code>, <code>SUPABASE_KEY</code>, <code>VITE_SUPABASE_URL</code>, dll).
                     </li>
                     <li>
-                      <strong>Auto-Pagination:</strong> Pengambilan data otomatis memaginasi ribuan baris realisasi tanpa batas 1.000 baris bawaan Supabase.
+                      <strong>Batas 1.000 Baris Supabase:</strong> Supabase secara default membatasi hasil query maksimal 1.000 baris. Kini kami telah mengaktifkan <em>auto-pagination</em> sehingga ribuan baris realisasi akan ditarik secara penuh tanpa ada yang terpotong.
                     </li>
                     <li>
-                      <strong>Filter Bulan Default:</strong> Mencakup seluruh 12 bulan (Jan-Des).
+                      <strong>Filter Bulan Default:</strong> Sebelumnya bulan bayar default hanya Jan-Okt. Kini filter otomatis mencakup seluruh 12 bulan (Jan-Des).
                     </li>
                   </ul>
                 </div>
@@ -318,6 +322,7 @@ export const DataDiagnosticModal: React.FC<DataDiagnosticModalProps> = ({
                     <pre>{JSON.stringify(report.sampleTargets, null, 2)}</pre>
                   </div>
                 </div>
+
                 <div>
                   <h4 className="font-bold text-slate-900 mb-1.5">Sampel Baris dari 952_was1_realisasi:</h4>
                   <div className="bg-slate-900 text-slate-200 p-3 rounded-xl font-mono text-[11px] overflow-x-auto max-h-48">

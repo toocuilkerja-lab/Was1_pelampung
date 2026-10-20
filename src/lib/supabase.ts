@@ -45,7 +45,6 @@ export function getSupabaseCredentials(): { url: string; anonKey: string; source
   // 1. Browser LocalStorage (highest priority for manual overrides)
   const localUrl = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY_URL) : '';
   const localKey = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY_KEY) : '';
-
   if (localUrl && localKey && localUrl.startsWith('http')) {
     return { url: localUrl.trim(), anonKey: localKey.trim(), source: 'Local Storage (Manual)' };
   }
@@ -231,9 +230,11 @@ export function normalizeRealisasiRow(raw: Record<string, unknown>, index: numbe
   const kdmap = String(getProp(raw, ['kdmap', 'kd_map', 'map', 'kodemap']) || '411121').trim();
   const kdbayar = String(getProp(raw, ['kdbayar', 'kd_bayar', 'kodepembayaran', 'bayar']) || '100').trim();
   const masa = String(getProp(raw, ['masa', 'masapajak', 'masa_pajak']) || '1').trim();
+
   const rawTahun = Number(getProp(raw, ['tahun', 'tahunpajak', 'tahun_pajak'])) || 2026;
   const rawTahunBayar = Number(getProp(raw, ['tahunbayar', 'tahun_bayar', 'thnbayar'])) || rawTahun;
   const rawBulanBayar = parseMonth(getProp(raw, ['bulanbayar', 'bulan_bayar', 'blnbayar', 'bulan']));
+
   const nominal = parseNominal(getProp(raw, ['nominal', 'realisasi', 'nilai', 'rupiah', 'jumlah', 'bayar']));
   const flag = String(getProp(raw, ['flag', 'jenis', 'kategori']) || 'PPM').trim().toUpperCase();
 
@@ -275,12 +276,14 @@ export async function testSupabaseConnection(): Promise<{ success: boolean; mess
         message: 'Koneksi ke Supabase berhasil, namun tabel "952_was1_target" belum dibuat. Silakan jalankan script SQL Schema.',
       };
     }
+
     if (realisasiRes.error && realisasiRes.error.code === '42P01') {
       return {
         success: false,
         message: 'Koneksi ke Supabase berhasil, namun tabel "952_was1_realisasi" belum dibuat. Silakan jalankan script SQL Schema.',
       };
     }
+
     if (targetRes.error) {
       return {
         success: false,
@@ -363,6 +366,7 @@ export async function fetchRealisasiData(): Promise<{
       const countRes = await client
         .from('952_was1_realisasi')
         .select('*', { count: 'exact', head: true });
+
       const totalExpected = countRes.count ?? 0;
 
       // 2. Paginate to fetch 100% of all rows with concurrent batching (e.g. 36k+ rows loaded in ~2-3 seconds)
@@ -470,6 +474,7 @@ export async function runSupabaseDiagnostics(): Promise<SupabaseDiagnosticReport
     const sum2026 = realisasi
       .filter((r) => r.tahunbayar === 2026)
       .reduce((sum, r) => sum + r.nominal, 0);
+
     const sum2025 = realisasi
       .filter((r) => r.tahunbayar === 2025)
       .reduce((sum, r) => sum + r.nominal, 0);

@@ -17,6 +17,7 @@ export const GlobalFilter: React.FC<GlobalFilterProps> = ({
   selectedMonths,
   onMonthsChange,
   className = '',
+  isCompact = false,
 }) => {
   const [isMonthDropdownOpen, setIsMonthDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -141,35 +142,35 @@ export const GlobalFilter: React.FC<GlobalFilterProps> = ({
                   <button
                     type="button"
                     onClick={selectAllMonths}
-                    className="px-2 py-1 text-[11px] font-medium rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+                    className="px-2 py-1 text-[11px] font-medium rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
                   >
                     Semua (12 Bulan)
                   </button>
                   <button
                     type="button"
                     onClick={selectYTD}
-                    className="px-2 py-1 text-[11px] font-medium rounded bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors cursor-pointer"
+                    className="px-2 py-1 text-[11px] font-medium rounded bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors"
                   >
                     Jan - Okt (YTD)
                   </button>
                   <button
                     type="button"
                     onClick={selectQ1}
-                    className="px-2 py-1 text-[11px] font-medium rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+                    className="px-2 py-1 text-[11px] font-medium rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
                   >
                     TW I (Jan-Mar)
                   </button>
                   <button
                     type="button"
                     onClick={selectQ2}
-                    className="px-2 py-1 text-[11px] font-medium rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+                    className="px-2 py-1 text-[11px] font-medium rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
                   >
                     TW II (Apr-Jun)
                   </button>
                   <button
                     type="button"
                     onClick={selectQ3}
-                    className="px-2 py-1 text-[11px] font-medium rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+                    className="px-2 py-1 text-[11px] font-medium rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
                   >
                     TW III (Jul-Sep)
                   </button>
@@ -205,7 +206,7 @@ export const GlobalFilter: React.FC<GlobalFilterProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsMonthDropdownOpen(false)}
-                    className="px-3 py-1 bg-slate-900 text-white font-medium rounded-md hover:bg-slate-800 transition-colors cursor-pointer"
+                    className="px-3 py-1 bg-slate-900 text-white font-medium rounded-md hover:bg-slate-800 transition-colors"
                   >
                     Terapkan
                   </button>
@@ -228,13 +229,13 @@ export const GlobalFilter: React.FC<GlobalFilterProps> = ({
             </span>
           </div>
 
-          {(flag !== 'Semua' || selectedMonths.length !== 12) && (
+          {(flag !== 'Semua' || selectedMonths.length !== 10) && (
             <button
               onClick={() => {
                 onFlagChange('Semua');
-                selectAllMonths();
+                selectYTD();
               }}
-              title="Kembalikan ke filter awal (Semua Flag, 12 Bulan)"
+              title="Kembalikan ke filter awal (Semua Flag, Jan-Okt)"
               className="flex items-center gap-1 text-blue-600 hover:text-blue-800 font-medium hover:underline cursor-pointer"
             >
               <RotateCcw className="w-3 h-3" />

@@ -41,11 +41,13 @@ export const MainTable: React.FC<MainTableProps> = ({
   const sortedSummaries = [...summaries].sort((a, b) => {
     let aVal = a[sortField];
     let bVal = b[sortField];
+
     if (typeof aVal === 'string') {
       return sortOrder === 'asc'
         ? (aVal as string).localeCompare(bVal as string)
         : (bVal as string).localeCompare(aVal as string);
     }
+
     return sortOrder === 'asc' ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number);
   });
 
@@ -68,7 +70,7 @@ export const MainTable: React.FC<MainTableProps> = ({
           <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
             <span>Tabel Agregasi Kinerja Penerimaan Pajak per AR</span>
             <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
-              {summaries.length} AR
+              8 AR
             </span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5">
@@ -76,6 +78,7 @@ export const MainTable: React.FC<MainTableProps> = ({
             <span>Klik pada <strong>Nama AR</strong> atau tombol rincian untuk membuka drill-down per Wajib Pajak</span>
           </p>
         </div>
+
         <div className="flex items-center gap-2 text-xs text-slate-600">
           <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
           <span>Tumbuh / Capaian Positif</span>
@@ -217,12 +220,12 @@ export const MainTable: React.FC<MainTableProps> = ({
                     {formatRupiah(ar.target)}
                   </td>
 
-                  {/* 4. 2026 (Tahun Berjalan) - Clean Formatted Currency */}
+                  {/* 4. 2026 (Tahun Berjalan) - Clean Formatted Currency (Not Clickable) */}
                   <td className="py-3.5 px-4 text-right font-mono text-xs whitespace-nowrap bg-blue-50/20 border-x border-blue-100/60 font-bold text-blue-950">
                     {formatRupiah(ar.realisasi2026)}
                   </td>
 
-                  {/* 5. 2025 (Tahun Sebelumnya) - Clean Formatted Currency */}
+                  {/* 5. 2025 (Tahun Sebelumnya) - Clean Formatted Currency (Not Clickable) */}
                   <td className="py-3.5 px-4 text-right font-mono text-xs whitespace-nowrap text-slate-700">
                     {formatRupiah(ar.realisasi2025)}
                   </td>
@@ -282,12 +285,13 @@ export const MainTable: React.FC<MainTableProps> = ({
           <tfoot className="bg-slate-900 text-white font-bold border-t-2 border-slate-700">
             <tr>
               <td className="py-4 px-3.5 text-center text-xs text-slate-400">
+                Σ
               </td>
               <td className="py-4 px-4 text-sm font-bold tracking-tight">
                 <div className="flex items-center gap-2">
                   <span>{grandTotal.nama}</span>
                   <span className="text-[11px] font-normal px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                    Total {summaries.length} AR
+                    Total 8 AR
                   </span>
                 </div>
               </td>

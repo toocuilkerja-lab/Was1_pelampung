@@ -11,10 +11,7 @@ import { MetricCards } from './components/MetricCards';
 import { MainTable } from './components/MainTable';
 import { DetailModal } from './components/DetailModal';
 import { LoadingProgressModal } from './components/LoadingProgressModal';
-import { SupabaseConfigModal } from './components/SupabaseConfigModal';
-import { DataDiagnosticModal } from './components/DataDiagnosticModal';
-import { DeploymentGuideModal } from './components/DeploymentGuideModal';
-import { Database, RefreshCw, Sliders } from 'lucide-react';
+import { Database, RefreshCw, AlertCircle } from 'lucide-react';
 
 export default function App() {
   // Data states - strictly initialized as empty arrays (NO DUMMY DATA)
@@ -31,11 +28,6 @@ export default function App() {
   // Drill-down Modal states
   const [selectedAR, setSelectedAR] = useState<string | null>(null);
   const [drilldownYear, setDrilldownYear] = useState<number>(2026);
-
-  // Modals for Supabase configuration, Diagnostics, and Deployment Guide
-  const [isConfigOpen, setIsConfigOpen] = useState<boolean>(false);
-  const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState<boolean>(false);
-  const [isDeployGuideOpen, setIsDeployGuideOpen] = useState<boolean>(false);
 
   // Load data function with simulated smooth progress from 0% to 90%, then snapping to 100% on resolution
   const loadData = useCallback(async () => {
@@ -139,9 +131,6 @@ export default function App() {
       <Header
         isLoading={isLoading}
         onRefresh={loadData}
-        onOpenSupabaseConfig={() => setIsConfigOpen(true)}
-        onOpenDiagnostics={() => setIsDiagnosticsOpen(true)}
-        onOpenDeploymentGuide={() => setIsDeployGuideOpen(true)}
       />
 
       {/* 2. Main Content Container */}
@@ -156,28 +145,19 @@ export default function App() {
               <Database className="w-8 h-8" />
             </div>
             <h2 className="text-lg font-bold text-slate-900 mb-2">
-              Belum Ada Data di Database Supabase
+              Belum Ada Data di Database
             </h2>
             <p className="text-xs text-slate-500 leading-relaxed max-w-md mx-auto mb-6">
               Tabel <code>952_was1_target</code> atau <code>952_was1_realisasi</code> belum memiliki baris data atau belum terisi. Sesuai ketentuan, data demo tidak ditampilkan.
             </p>
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              <button
-                onClick={() => setIsConfigOpen(true)}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold inline-flex items-center gap-2 cursor-pointer transition-colors shadow-sm"
-              >
-                <Sliders className="w-3.5 h-3.5" />
-                <span>Pengaturan Supabase</span>
-              </button>
-              <button
-                onClick={loadData}
-                disabled={isLoading}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold inline-flex items-center gap-2 cursor-pointer transition-colors shadow-sm disabled:opacity-50"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-                <span>Muat Ulang dari Supabase</span>
-              </button>
-            </div>
+            <button
+              onClick={loadData}
+              disabled={isLoading}
+              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold inline-flex items-center gap-2 cursor-pointer transition-colors shadow-sm disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+              <span>Muat Ulang Data</span>
+            </button>
           </div>
         ) : (
           // Real Data Rendered Only After 100% Loading Done
@@ -230,30 +210,6 @@ export default function App() {
       <LoadingProgressModal
         isOpen={isLoading}
         progress={loadingProgress}
-      />
-
-      {/* 8. Supabase Config Modal */}
-      <SupabaseConfigModal
-        isOpen={isConfigOpen}
-        onClose={() => setIsConfigOpen(false)}
-        onConfigSaved={() => loadData()}
-      />
-
-      {/* 9. Data Diagnostics Modal */}
-      <DataDiagnosticModal
-        isOpen={isDiagnosticsOpen}
-        onClose={() => setIsDiagnosticsOpen(false)}
-        onRefreshData={loadData}
-        onOpenSettings={() => {
-          setIsDiagnosticsOpen(false);
-          setIsConfigOpen(true);
-        }}
-      />
-
-      {/* 10. Deployment Guide Modal */}
-      <DeploymentGuideModal
-        isOpen={isDeployGuideOpen}
-        onClose={() => setIsDeployGuideOpen(false)}
       />
 
       {/* Footer */}

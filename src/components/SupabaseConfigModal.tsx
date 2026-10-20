@@ -8,6 +8,7 @@ import {
   Check,
   RefreshCw,
   Sliders,
+  ExternalLink,
   Code,
   Trash2,
 } from 'lucide-react';
@@ -106,7 +107,7 @@ export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -199,6 +200,7 @@ export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({
                     <div className="font-bold">Otomatis (Auto)</div>
                     <div className="text-[10px] text-slate-500">Gunakan Supabase jika valid, fallback ke Demo</div>
                   </button>
+
                   <button
                     type="button"
                     onClick={() => setMode('supabase')}
@@ -211,6 +213,7 @@ export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({
                     <div className="font-bold">Paksa Supabase</div>
                     <div className="text-[10px] text-slate-500">Hanya ambil dari server Supabase</div>
                   </button>
+
                   <button
                     type="button"
                     onClick={() => setMode('demo')}
@@ -271,6 +274,7 @@ export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({
                   <span>{isCopied ? 'Tersalin!' : 'Salin Script SQL'}</span>
                 </button>
               </div>
+
               <div className="bg-slate-900 rounded-xl p-3.5 max-h-80 overflow-y-auto font-mono text-xs text-slate-200">
                 <pre>{generateSupabaseSQLScript()}</pre>
               </div>
@@ -283,7 +287,7 @@ export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({
           <button
             type="button"
             onClick={handleReset}
-            className="flex items-center gap-1.5 text-xs text-rose-600 hover:text-rose-800 hover:underline cursor-pointer"
+            className="flex items-center gap-1.5 text-xs text-rose-600 hover:text-rose-800 hover:underline"
           >
             <Trash2 className="w-3.5 h-3.5" />
             <span>Hapus Kredensial Browser</span>
@@ -292,14 +296,14 @@ export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
+              className="px-4 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
             >
               Batal
             </button>
             <button
               type="button"
               onClick={handleSave}
-              className="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors shadow-xs cursor-pointer"
+              className="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors shadow-xs"
             >
               Simpan & Terapkan
             </button>

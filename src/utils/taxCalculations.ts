@@ -56,13 +56,16 @@ export function matchesFlagFilter(rowFlag: string, filter: FlagFilter): boolean 
   if (cleanFilter === 'PKM P3') {
     return cleanRowFlag.includes('P3') || cleanRowFlag === 'PKM P3' || cleanRowFlag === 'PKM-P3';
   }
+
   if (cleanFilter === 'PKM') {
     // Exact PKM (excluding PKM P3 if PKM is selected specifically, or general PKM)
     return cleanRowFlag === 'PKM' || (!cleanRowFlag.includes('P3') && cleanRowFlag.includes('PKM'));
   }
+
   if (cleanFilter === 'PPM') {
     return cleanRowFlag.includes('PPM');
   }
+
   return cleanRowFlag === cleanFilter;
 }
 
@@ -74,7 +77,6 @@ export function matchesFlagFilter(rowFlag: string, filter: FlagFilter): boolean 
 export function matchesTargetFlag(targetFlag: string, filter: FlagFilter): boolean {
   if (filter === 'Semua') return true;
   const cleanTargetFlag = (targetFlag || '').trim().toUpperCase();
-
   if (filter === 'PKM P3') {
     return cleanTargetFlag.includes('PKM');
   }
@@ -105,18 +107,22 @@ export function filterRealisasiRows(
     if (filter.namaAR && row.nama.trim().toLowerCase() !== filter.namaAR.trim().toLowerCase()) {
       return false;
     }
+
     // 2. Tahun bayar filter
     if (filter.tahunBayar && row.tahunbayar !== filter.tahunBayar) {
       return false;
     }
+
     // 3. Flag filter
     if (!matchesFlagFilter(row.flag, filter.flag)) {
       return false;
     }
+
     // 4. Bulan bayar filter
     if (filter.bulanBayar.length > 0 && !filter.bulanBayar.includes(row.bulanbayar)) {
       return false;
     }
+
     // 5. Search query filter (namawp, kdmap, kdbayar)
     if (filter.searchQuery && filter.searchQuery.trim() !== '') {
       const q = filter.searchQuery.toLowerCase().trim();
@@ -124,11 +130,11 @@ export function filterRealisasiRows(
       const matchMap = String(row.kdmap).toLowerCase().includes(q);
       const matchKodeBayar = String(row.kdbayar).toLowerCase().includes(q);
       const matchMasa = String(row.masa).toLowerCase().includes(q);
-
       if (!matchWP && !matchMap && !matchKodeBayar && !matchMasa) {
         return false;
       }
     }
+
     return true;
   });
 }
@@ -204,6 +210,7 @@ export function calculateARSummaries(
     const realisasi2026 = realisasi2026Map.get(nama) || 0;
     const realisasi2025 = realisasi2025Map.get(nama) || 0;
     const selisih = realisasi2026 - realisasi2025;
+
     const capaian = target > 0 ? (realisasi2026 / target) * 100 : 0;
     const pertumbuhan =
       realisasi2025 > 0
