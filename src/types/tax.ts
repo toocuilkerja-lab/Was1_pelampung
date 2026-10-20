@@ -55,13 +55,93 @@ export const MONTHS: MonthOption[] = [
 ];
 
 export const MAP_DESCRIPTIONS: Record<string, string> = {
+  // 1. Kelompok PPh Ditanggung Pemerintah (DTP) & Khusus
+  '411141': 'PPh Pasal 21 Ditanggung Pemerintah (DTP)',
+  '411142': 'PPh Pasal 22 DTP',
+  '411143': 'PPh Pasal 22 Impor DTP',
+  '411144': 'PPh Pasal 23 DTP',
+  '411145': 'PPh Pasal 25/29 Orang Pribadi DTP',
+  '411146': 'PPh Pasal 25/29 Badan DTP',
+  '411147': 'PPh Pasal 26 DTP',
+  '411148': 'PPh Final DTP',
+  '411149': 'PPh Non-Migas Lainnya DTP',
+  '411241': 'PPN DTP',
+  '411242': 'PPnBM DTP',
+  '411631': 'Sanksi Penagihan PPh DTP',
+  '411641': 'Pajak Karbon',
+
+  // 2. Kelompok Pajak Penghasilan (PPh) Reguler
+  '411111': 'PPh Minyak Bumi',
+  '411112': 'PPh Gas Alam',
   '411121': 'PPh Pasal 21',
   '411122': 'PPh Pasal 22',
+  '411123': 'PPh Pasal 22 Impor',
   '411124': 'PPh Pasal 23',
   '411125': 'PPh Pasal 25/29 Orang Pribadi',
   '411126': 'PPh Pasal 25/29 Badan',
+  '411127': 'PPh Pasal 26',
   '411128': 'PPh Final',
+  '411129': 'PPh Non-Migas Lainnya',
+
+  // 3. Kelompok PPN dan PPnBM
   '411211': 'PPN Dalam Negeri',
   '411212': 'PPN Impor',
+  '411219': 'PPN Lainnya',
+  '411221': 'PPnBM Dalam Negeri',
+  '411222': 'PPnBM Impor',
+  '411229': 'PPnBM Lainnya',
+
+  // 4. Kelompok PBB (Pajak Bumi dan Bangunan) Sektor Pusat
+  '411313': 'PBB Perkebunan',
+  '411314': 'PBB Perhutanan',
+  '411315': 'PBB Pertambangan Minerba',
+  '411316': 'PBB Pertambangan Migas',
+  '411317': 'PBB Sektor Panas Bumi',
+  '411319': 'PBB Sektor Lainnya',
+
+  // 5. Kelompok Bea Meterai & Bunga/Denda Penagihan
+  '411611': 'Bea Meterai',
+  '411618': 'Deposit Pajak',
   '411619': 'Pajak Lainnya',
+  '411621': 'Bunga/Denda Penagihan PPh',
+  '411622': 'Bunga/Denda Penagihan PPN',
+  '411623': 'Bunga/Denda Penagihan PPnBM',
+  '411624': 'Bunga/Denda Penagihan Pajak Tidak Langsung Lainnya',
 };
+
+export interface JenisPajakSummary {
+  kdmap: string;
+  namaJenisPajak: string;
+  realisasi2026: number;
+  realisasi2025: number;
+  selisih: number;
+  pertumbuhan: number; // percentage
+  kontribusi: number; // percentage of 2026 total
+  wpCount2026: number;
+  transaksiCount2026: number;
+  transaksiCount2025: number;
+}
+
+export interface PengawasanMasaBulanBreakdown {
+  monthNum: number; // 1-12 or 0 (Tahunan)
+  monthCode: string; // "01", "02", ..., "12", "00"
+  displayName: string;
+  isTahunan: boolean;
+  nominal2026: number;
+  nominal2025: number;
+  selisih: number;
+  pertumbuhan: number;
+}
+
+export interface PengawasanMasaWPSummary {
+  namawp: string;
+  namaAR: string;
+  kdmapList: string[];
+  total2026: number;
+  total2025: number;
+  selisih: number;
+  pertumbuhan: number;
+  bulanBreakdown: PengawasanMasaBulanBreakdown[];
+  allTransactions: RealisasiRow[];
+}
+

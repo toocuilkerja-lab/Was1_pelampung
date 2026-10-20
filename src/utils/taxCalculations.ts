@@ -1,4 +1,4 @@
-import { TargetRow, RealisasiRow, FlagFilter, ARSummary } from '../types/tax';
+import { TargetRow, RealisasiRow, FlagFilter, ARSummary, JenisPajakSummary, MAP_DESCRIPTIONS } from '../types/tax';
 
 /**
  * Format number to Indonesian Rupiah currency format
@@ -265,3 +265,133 @@ export function calculateARSummaries(
 
   return { arSummaries, grandTotal };
 }
+
+/**
+ * Calculate aggregation summary per Jenis Pajak (Kode MAP)
+ */
+export function calculateJenisPajakSummaries(
+  realisasiRows: RealisasiRow[],
+  flagFilter: FlagFilter,
+  selectedMonths: number[],
+  yearCurrent: number = 2026,
+  yearPrevious: number = 2025
+): {
+  jenisPajakSummaries: JenisPajakSummary[];
+  grandTotalJenisPajak: JenisPajakSummary;
+} {
+  // Collect all distinct MAP codes present in realisasi rows
+  const distinctMaps = Array.from(
+    new Set(realisasiRows.map((r) => String(r.kdmap)))
+  )
+    .filter((k) => k && k.trim() !== '')
+    .sort((a, b) => a.localeCompare(b));
+
+  // Filter 2026 realisasi
+  const r2026Filtered = realisasiRows.filter(
+    (row) =>
+      row.tahunbayar === yearCurrent &&
+      matchesFlagFilter(row.flag, flagFilter) &&
+      (selectedMonths.length === 0 || selectedMonths.includes(row.bulanbayar))
+  );
+
+  // Filter 2025 realisasi
+  const r2025Filtered = realisasiRows.filter(
+    (row) =>
+      row.tahunbayar === yearPrevious &&
+      matchesFlagFilter(row.flag, flagFilter) &&
+      (selectedMonths.length === 0 || selectedMonths.includes(row.bulanbayar))
+  );
+
+  // Pre-calculate total 2026 for contribution %
+  const totalRealisasi2026All = r2026Filtered.reduce((sum, r) => sum + Number(r.nominal || 0), 0);
+
+  // Group 2026 per map
+  const map2026 = new Map<string, { nominal: number; wpSet: Set<string>; count: number }>();
+  r2026Filtered.forEach((row) => {
+    const k = String(row.kdmap);
+    if (!map2026.has(k)) {
+      map2026.set(k, { nominal: 0, wpSet: new Set(), count: 0 });
+    }
+    const cur = map2026.get(k)!;
+    cur.nominal += Number(row.nominal || 0);
+    cur.wpSet.add(row.namawp);
+    cur.count += 1;
+  });
+
+  // Group 2025 per map
+  const map2025 = new Map<string, { nominal: number; count: number }>();
+  r2025Filtered.forEach((row) => {
+    const k = String(row.kdmap);
+    if (!map2025.has(k)) {
+      map2025.set(k, { nominal: 0, count: 0 });
+    }
+    const cur = map2025.get(k)!;
+    cur.nominal += Number(row.nominal || 0);
+    cur.count += 1;
+  });
+
+  const jenisPajakSummaries: JenisPajakSummary[] = distinctMaps
+    .map((kdmap) => {
+      const data2026 = map2026.get(kdmap) || { nominal: 0, wpSet: new Set(), count: 0 };
+      const data2025 = map2025.get(kdmap) || { nominal: 0, count: 0 };
+
+      const realisasi2026 = data2026.nominal;
+      const realisasi2025 = data2025.nominal;
+      const selisih = realisasi2026 - realisasi2025;
+      const pertumbuhan =
+        realisasi2025 > 0
+          ? (selisih / realisasi2025) * 100
+          : realisasi2026 > 0
+          ? 100
+          : 0;
+
+      const kontribusi =
+        totalRealisasi2026All > 0 ? (realisasi2026 / totalRealisasi2026All) * 100 : 0;
+
+      const namaJenisPajak = MAP_DESCRIPTIONS[kdmap] || `Pajak MAP ${kdmap}`;
+
+      return {
+        kdmap,
+        namaJenisPajak,
+        realisasi2026,
+        realisasi2025,
+        selisih,
+        pertumbuhan,
+        kontribusi,
+        wpCount2026: data2026.wpSet.size,
+        transaksiCount2026: data2026.count,
+        transaksiCount2025: data2025.count,
+      };
+    })
+    // Only show maps that have transactions or realisasi
+    .filter((item) => item.realisasi2026 > 0 || item.realisasi2025 > 0 || item.transaksiCount2026 > 0 || item.transaksiCount2025 > 0);
+
+  const total2026 = jenisPajakSummaries.reduce((sum, item) => sum + item.realisasi2026, 0);
+  const total2025 = jenisPajakSummaries.reduce((sum, item) => sum + item.realisasi2025, 0);
+  const totalSelisih = total2026 - total2025;
+  const totalPertumbuhan =
+    total2025 > 0
+      ? (totalSelisih / total2025) * 100
+      : total2026 > 0
+      ? 100
+      : 0;
+
+  const totalWpAll = new Set<string>();
+  r2026Filtered.forEach((r) => totalWpAll.add(r.namawp));
+
+  const grandTotalJenisPajak: JenisPajakSummary = {
+    kdmap: 'ALL',
+    namaJenisPajak: 'TOTAL SELURUH JENIS PAJAK',
+    realisasi2026: total2026,
+    realisasi2025: total2025,
+    selisih: totalSelisih,
+    pertumbuhan: totalPertumbuhan,
+    kontribusi: total2026 > 0 ? 100 : 0,
+    wpCount2026: totalWpAll.size,
+    transaksiCount2026: r2026Filtered.length,
+    transaksiCount2025: r2025Filtered.length,
+  };
+
+  return { jenisPajakSummaries, grandTotalJenisPajak };
+}
+

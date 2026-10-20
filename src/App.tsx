@@ -4,16 +4,22 @@ import {
   fetchTargetData,
   fetchRealisasiData,
 } from './lib/supabase';
-import { calculateARSummaries } from './utils/taxCalculations';
+import { calculateARSummaries, calculateJenisPajakSummaries } from './utils/taxCalculations';
 import { Header } from './components/Header';
 import { GlobalFilter } from './components/GlobalFilter';
 import { MetricCards } from './components/MetricCards';
 import { MainTable } from './components/MainTable';
 import { DetailModal } from './components/DetailModal';
+import { JenisPajakTable } from './components/JenisPajakTable';
+import { JenisPajakDetailModal } from './components/JenisPajakDetailModal';
+import { PengawasanMasaView } from './components/PengawasanMasaView';
 import { LoadingProgressModal } from './components/LoadingProgressModal';
-import { Database, RefreshCw, AlertCircle } from 'lucide-react';
+import { Database, RefreshCw, AlertCircle, Users, Layers, CalendarRange } from 'lucide-react';
 
 export default function App() {
+  // Navigation Tab State: 'ar' | 'map' | 'pengawasan_masa' (Default: 'ar')
+  const [activeTab, setActiveTab] = useState<'ar' | 'map' | 'pengawasan_masa'>('ar');
+
   // Data states - strictly initialized as empty arrays (NO DUMMY DATA)
   const [targetRows, setTargetRows] = useState<TargetRow[]>([]);
   const [realisasiRows, setRealisasiRows] = useState<RealisasiRow[]>([]);
@@ -25,9 +31,12 @@ export default function App() {
   const [globalFlag, setGlobalFlag] = useState<FlagFilter>('Semua');
   const [globalMonths, setGlobalMonths] = useState<number[]>([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
 
-  // Drill-down Modal states
+  // Drill-down Modal states (per AR)
   const [selectedAR, setSelectedAR] = useState<string | null>(null);
   const [drilldownYear, setDrilldownYear] = useState<number>(2026);
+
+  // Drill-down Modal state (per Jenis Pajak / MAP)
+  const [selectedMAP, setSelectedMAP] = useState<string | null>(null);
 
   // Load data function with simulated smooth progress from 0% to 90%, then snapping to 100% on resolution
   const loadData = useCallback(async () => {
@@ -113,7 +122,18 @@ export default function App() {
     );
   }, [targetRows, realisasiRows, arList, globalFlag, globalMonths, currentYear, previousYear]);
 
-  // Handle drill-down selection
+  // Aggregate summaries per Jenis Pajak (Kode MAP)
+  const { jenisPajakSummaries, grandTotalJenisPajak } = useMemo(() => {
+    return calculateJenisPajakSummaries(
+      realisasiRows,
+      globalFlag,
+      globalMonths,
+      currentYear,
+      previousYear
+    );
+  }, [realisasiRows, globalFlag, globalMonths, currentYear, previousYear]);
+
+  // Handle drill-down selection (per AR)
   const handleSelectAR = (namaAR: string, defaultYear: number = currentYear) => {
     setSelectedAR(namaAR);
     setDrilldownYear(defaultYear);
@@ -180,14 +200,85 @@ export default function App() {
               />
             </section>
 
-            {/* 5. Main Aggregation Table (AR of Was I) */}
-            <section aria-label="Tabel Agregasi per AR">
-              <MainTable
-                summaries={arSummaries}
-                grandTotal={grandTotal}
-                onSelectAR={handleSelectAR}
-                activeFlag={globalFlag}
-              />
+            {/* 5. Main Content Navigation Tabs: Per AR (Default) | Per Jenis Pajak | Pengawasan Masa */}
+            <section aria-label="Kinerja Penerimaan Pajak" className="space-y-3">
+              {/* Tab Navigation Buttons */}
+              <div className="flex border-b border-slate-200 bg-white rounded-t-xl px-2 pt-2 gap-1 shadow-2xs overflow-x-auto">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('ar')}
+                  className={`flex items-center gap-2 px-4 py-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+                    activeTab === 'ar'
+                      ? 'border-blue-600 text-blue-900 bg-blue-50/50 rounded-t-lg'
+                      : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50 rounded-t-lg'
+                  }`}
+                >
+                  <Users className="w-4 h-4" />
+                  <span>Per AR</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('map')}
+                  className={`flex items-center gap-2 px-4 py-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+                    activeTab === 'map'
+                      ? 'border-blue-600 text-blue-900 bg-blue-50/50 rounded-t-lg'
+                      : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50 rounded-t-lg'
+                  }`}
+                >
+                  <Layers className="w-4 h-4" />
+                  <span>Per Jenis Pajak</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('pengawasan_masa')}
+                  className={`flex items-center gap-2 px-4 py-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+                    activeTab === 'pengawasan_masa'
+                      ? 'border-blue-600 text-blue-900 bg-blue-50/50 rounded-t-lg'
+                      : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50 rounded-t-lg'
+                  }`}
+                >
+                  <CalendarRange className="w-4 h-4" />
+                  <span>Pengawasan Masa</span>
+                </button>
+              </div>
+
+              {/* Tab Panel 1: Per AR */}
+              {activeTab === 'ar' && (
+                <div className="animate-in fade-in duration-150">
+                  <MainTable
+                    summaries={arSummaries}
+                    grandTotal={grandTotal}
+                    onSelectAR={handleSelectAR}
+                    activeFlag={globalFlag}
+                  />
+                </div>
+              )}
+
+              {/* Tab Panel 2: Per Jenis Pajak */}
+              {activeTab === 'map' && (
+                <div className="animate-in fade-in duration-150">
+                  <JenisPajakTable
+                    summaries={jenisPajakSummaries}
+                    grandTotal={grandTotalJenisPajak}
+                    onSelectMAP={(kdmap) => setSelectedMAP(kdmap)}
+                    activeFlag={globalFlag}
+                  />
+                </div>
+              )}
+
+              {/* Tab Panel 3: Pengawasan Masa */}
+              {activeTab === 'pengawasan_masa' && (
+                <div className="animate-in fade-in duration-150">
+                  <PengawasanMasaView
+                    realisasiRows={realisasiRows}
+                    arList={arList}
+                    globalFlag={globalFlag}
+                    globalMonths={globalMonths}
+                  />
+                </div>
+              )}
             </section>
           </>
         )}
@@ -203,6 +294,18 @@ export default function App() {
           globalFlag={globalFlag}
           globalMonths={globalMonths}
           initialYear={drilldownYear}
+        />
+      )}
+
+      {/* 7. Drill-down Modal (Wajib Pajak Detail per Jenis Pajak / MAP) */}
+      {selectedMAP && (
+        <JenisPajakDetailModal
+          isOpen={Boolean(selectedMAP)}
+          onClose={() => setSelectedMAP(null)}
+          kdmap={selectedMAP}
+          allRealisasiRows={realisasiRows}
+          globalFlag={globalFlag}
+          globalMonths={globalMonths}
         />
       )}
 
